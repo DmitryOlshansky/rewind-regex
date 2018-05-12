@@ -3,8 +3,7 @@
 */
 module ut.old;
 
-import std.conv, std.exception, std.meta, std.range,
-    std.typecons;
+import std.conv, std.exception, std.meta, std.range, std.typecons;
 import std.uni : Escapables; // characters that need escaping
 import rewind.regex;
 
