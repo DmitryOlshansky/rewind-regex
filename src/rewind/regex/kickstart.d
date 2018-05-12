@@ -2,12 +2,12 @@
     Kickstart is a coarse-grained "filter" engine that finds likely matches
     to be verified by full-blown matcher.
 */
-module std.regex.internal.kickstart;
+module rewind.regex.kickstart;
 
-package(std.regex):
+package:
 
 import std.range.primitives, std.utf;
-import std.regex.internal.ir;
+import rewind.regex.ir;
 
 //utility for shiftOr, returns a minimum number of bytes to test in a Char
 uint effectiveSize(Char)()
@@ -514,7 +514,8 @@ public:
 
 @system unittest
 {
-    import std.conv, std.regex;
+    import std.conv;
+    import rewind.regex;
     @trusted void test_fixed(alias Kick)()
     {
         static foreach (i, v; AliasSeq!(char, wchar, dchar))

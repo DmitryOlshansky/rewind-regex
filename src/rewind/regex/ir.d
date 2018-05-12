@@ -5,9 +5,9 @@
     This is a common ground between frontend regex component (parser)
     and backend components - generators, matchers and other "filters".
 */
-module std.regex.internal.ir;
+module rewind.regex.ir;
 
-package(std.regex):
+package:
 
 import std.exception, std.meta, std.range.primitives, std.traits, std.uni;
 
@@ -49,9 +49,26 @@ CharMatcher[CodepointSet] matcherCache;
 
 @property ref wordMatcher()()
 {
-    static CharMatcher matcher = CharMatcher(wordCharacter);
+    static bool inited;
+    static CharMatcher matcher;
+    if (!inited) {
+        matcher = CharMatcher(wordCharacter);
+        inited = true;
+    }
     return matcher;
 }
+
+//property for \w character class
+package @property @safe CodepointSet wordCharacter()
+{
+    static CodepointSet set;
+    if (set.empty) {
+        set = unicode.Alphabetic | unicode.Mn | unicode.Mc
+            | unicode.Me | unicode.Nd | unicode.Pc;
+    }
+    return set;
+}
+
 
 // some special Unicode white space characters
 private enum NEL = '\u0085', LS = '\u2028', PS = '\u2029';
@@ -504,42 +521,6 @@ class RuntimeFactory(alias EngineType, Char) : GenericFactory!(EngineType, Char)
     }
 }
 
-// A factory for compile-time engine
-class CtfeFactory(alias EngineType, Char, alias func) : GenericFactory!(EngineType, Char)
-{
-    override EngineType!Char construct(const ref Regex!Char re, in Char[] input, void[] memory) const
-    {
-        import std.conv : emplace;
-        return emplace!(EngineType!Char)(memory[0 .. classSize],
-            re, &func, Input!Char(input), memory[classSize .. $]);
-    }
-}
-
-// A workaround for R-T enum re = regex(...)
-template defaultFactory(Char)
-{
-    @property MatcherFactory!Char defaultFactory(const ref Regex!Char re) @safe
-    {
-        import std.regex.internal.backtracking : BacktrackingMatcher;
-        import std.regex.internal.thompson : ThompsonMatcher;
-        import std.algorithm.searching : canFind;
-        static MatcherFactory!Char backtrackingFactory;
-        static MatcherFactory!Char thompsonFactory;
-        if (re.backrefed.canFind!"a != 0")
-        {
-            if (backtrackingFactory is null)
-                backtrackingFactory = new RuntimeFactory!(BacktrackingMatcher, Char);
-            return backtrackingFactory;
-        }
-        else
-        {
-            if (thompsonFactory is null)
-                thompsonFactory = new RuntimeFactory!(ThompsonMatcher, Char);
-            return thompsonFactory;
-        }
-    }
-}
-
 // Defining it as an interface has the undesired side-effect:
 // casting any class to an interface silently adjusts pointer to point to a nested vtbl
 abstract class Matcher(Char)
@@ -616,8 +597,8 @@ struct Regex(Char)
         return NamedGroupRange(dict, 0, dict.length);
     }
 
-package(std.regex):
-    import std.regex.internal.kickstart : Kickstart; //TODO: get rid of this dependency
+package:
+    import rewind.regex.kickstart : Kickstart; //TODO: get rid of this dependency
     const(NamedGroup)[] dict;              // maps name -> user group number
     uint ngroup;                           // number of internal groups
     uint maxCounterDepth;                  // max depth of nested {n,m} repetitions
@@ -701,7 +682,7 @@ package(std.regex):
 
 // The stuff below this point is temporarrily part of IR module
 // but may need better place in the future (all internals)
-package(std.regex):
+package:
 
 //Simple UTF-string abstraction compatible with stream interface
 struct Input(Char)

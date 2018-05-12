@@ -1,19 +1,18 @@
-//Written in the D programming language
 /*
-    Regular expression pattern parser.
+    Regular expression pattern parser components.
 */
-module std.regex.internal.parser;
+module rewind.regex.parser;
 
-import std.regex.internal.ir;
 import std.range.primitives, std.uni, std.meta,
     std.traits, std.typecons, std.exception;
 static import std.ascii;
 
+import rewind.regex.ir, rewind.regex.impl.misc, rewind.regex.impl.tables;
+
 // package relevant info from parser into a regex object
 auto makeRegex(S, CG)(Parser!(S, CG) p)
 {
-    import std.regex.internal.backtracking : BacktrackingMatcher;
-    import std.regex.internal.thompson : ThompsonMatcher;
+    import rewind.regex.thompson : ThompsonMatcher;
     import std.algorithm.searching : canFind;
     alias Char = BasicElementOf!S;
     Regex!Char re;
@@ -30,11 +29,7 @@ auto makeRegex(S, CG)(Parser!(S, CG) p)
         backrefed = g.backrefed;
         re.postprocess();
         // check if we have backreferences, if so - use backtracking
-        if (__ctfe) factory = null; // allows us to use the awful enum re = regex(...);
-        else if (re.backrefed.canFind!"a != 0")
-            factory =  new RuntimeFactory!(BacktrackingMatcher, Char);
-        else
-            factory = new RuntimeFactory!(ThompsonMatcher, Char);
+        factory = new RuntimeFactory!(ThompsonMatcher, Char);
         debug(std_regex_parser)
         {
             __ctfe || print();
@@ -943,7 +938,7 @@ if (isForwardRange!R && is(ElementType!R : dchar))
             break;
         case 'p': case 'P':
             bool casefold = cast(bool)(re_flags & RegexOption.casefold);
-            auto set = unicode.parsePropertySpec(this, front == 'P', casefold);
+            auto set = parsePropertySpec(this, front == 'P', casefold);
             g.charsetToIr(set);
             break;
         case 'x':
@@ -957,7 +952,7 @@ if (isForwardRange!R && is(ElementType!R : dchar))
             g.put(Bytecode(IR.Char, code));
             break;
         case 'c': //control codes
-            Bytecode code = Bytecode(IR.Char, unicode.parseControlCode(this));
+            Bytecode code = Bytecode(IR.Char, parseControlCode(this));
             popFront();
             g.put(code);
             break;
