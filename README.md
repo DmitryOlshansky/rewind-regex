@@ -13,9 +13,12 @@ In general - pick std.regex if:
 - love helpers such as splitter, replaceFirst/replaceAll etc.
 
 Try REwind Regex if your use case is:
-- @nogc (in the future)
 - grep-like tool or search engine
-- streaming (related to previous point)
+- streaming with IOpipe library (related to previous point)
 - performance is more important then having e.g. backreference
 - hate useless cruft that you can easily implement yourself
+- 100% @nogc (in the future) once exceptions are tackled by the lanauge
 
+## Technical details
+
+TBD.
