@@ -22,7 +22,7 @@ struct Stack(T)
         assert(!empty);
         auto val = data[$ - 1];
         data = data[0 .. $ - 1];
-        data.assumeSafeAppend();
+        if (!__ctfe) data.assumeSafeAppend();
         return val;
     }
 

@@ -49,7 +49,7 @@ CharMatcher[CodepointSet] matcherCache;
 
 @property ref wordMatcher()()
 {
-    static bool inited;
+    static bool inited = false;
     static CharMatcher matcher;
     if (!inited) {
         matcher = CharMatcher(wordCharacter);
@@ -68,7 +68,6 @@ package @property @safe CodepointSet wordCharacter()
     }
     return set;
 }
-
 
 // some special Unicode white space characters
 private enum NEL = '\u0085', LS = '\u2028', PS = '\u2029';

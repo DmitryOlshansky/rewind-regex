@@ -1,12 +1,12 @@
 /*
-    Regualar expressions package test suite.
+    Regular expressions package test suite.
 */
-module rewind.regex.test.old;
+module ut.old;
 
 import std.conv, std.exception, std.meta, std.range,
-    std.typecons, rewind.regex;
-
+    std.typecons;
 import std.uni : Escapables; // characters that need escaping
+import rewind.regex;
 
 @safe unittest
 {//sanity checks
@@ -15,16 +15,87 @@ import std.uni : Escapables; // characters that need escaping
     regex("abc|edf|ighrg");
     auto r1 = regex("abc");
     auto r2 = regex("(gylba)");
-    assert(match("abcdef", r1).hit == "abc");
-    assert(!match("wida",r2));
-    assert(bmatch("abcdef", r1).hit == "abc");
-    assert(!bmatch("wida", r2));
-    assert(match("abc", "abc".dup));
-    assert(bmatch("abc", "abc".dup));
+    assert(matchAll("abcdef", r1).hit == "abc");
+    assert(!matchAll("wida",r2));
+    assert(matchAll("abc", "abc".dup));
     Regex!char rc;
     assert(rc.empty);
     rc = regex("test");
     assert(!rc.empty);
+}
+
+// produces replacement string from format using captures for substitution
+void replaceFmt(R, Capt, OutR)
+    (R format, Capt captures, OutR sink, bool ignoreBadSubs = false)
+if (isOutputRange!(OutR, ElementEncodingType!R[]) &&
+    isOutputRange!(OutR, ElementEncodingType!(Capt.String)[]))
+{
+    import std.algorithm.searching : find;
+    import std.ascii : isDigit, isAlpha;
+    import std.conv : text, parse;
+    import std.exception : enforce;
+    enum State { Normal, Dollar }
+    auto state = State.Normal;
+    size_t offset;
+L_Replace_Loop:
+    while (!format.empty)
+        final switch (state)
+        {
+        case State.Normal:
+            for (offset = 0; offset < format.length; offset++)//no decoding
+            {
+                if (format[offset] == '$')
+                {
+                    state = State.Dollar;
+                    sink.put(format[0 .. offset]);
+                    format = format[offset+1 .. $];//ditto
+                    continue L_Replace_Loop;
+                }
+            }
+            sink.put(format[0 .. offset]);
+            format = format[offset .. $];
+            break;
+        case State.Dollar:
+            if (isDigit(format[0]))
+            {
+                uint digit = parse!uint(format);
+                enforce(ignoreBadSubs || digit < captures.length, text("invalid submatch number ", digit));
+                if (digit < captures.length)
+                    sink.put(captures[digit]);
+            }
+            else if (format[0] == '{')
+            {
+                auto x = find!(a => !isAlpha(a))(format[1..$]);
+                enforce(!x.empty && x[0] == '}', "no matching '}' in replacement format");
+                auto name = format[1 .. $ - x.length];
+                format = x[1..$];
+                enforce(!name.empty, "invalid name in ${...} replacement format");
+                sink.put(captures[name]);
+            }
+            else if (format[0] == '&')
+            {
+                sink.put(captures[0]);
+                format = format[1 .. $];
+            }
+            else if (format[0] == '`')
+            {
+                sink.put(captures.pre);
+                format = format[1 .. $];
+            }
+            else if (format[0] == '\'')
+            {
+                sink.put(captures.post);
+                format = format[1 .. $];
+            }
+            else if (format[0] == '$')
+            {
+                sink.put(format[0 .. 1]);
+                format = format[1 .. $];
+            }
+            state = State.Normal;
+            break;
+        }
+    enforce(state == State.Normal, "invalid format string in regex replace");
 }
 
 /* The test vectors in this file are altered from Henry Spencer's regexp
@@ -61,6 +132,10 @@ import std.uni : Escapables; // characters that need escaping
         string replace;
         string flags;
     }
+
+
+
+
 
     static immutable TestVectors[] tv = [
         TestVectors(  "a\\b",       "a",  "y",    "$&",    "a" ),
@@ -211,8 +286,8 @@ import std.uni : Escapables; // characters that need escaping
         TestVectors(  "\\cJ",      "abc\ndef",             "y",    "$&",    "\n" ),
         TestVectors(  "\\d",       "B2 is",                "y",    "$&",    "2" ),
         TestVectors(  "\\D",       "B2 is",                "y",    "$&",    "B" ),
-        TestVectors(  "\\s\\w*",   "foo ba`r",              "`y",    "$&",    " bar" ),
-        TestVectors(  "\\S\\w*",   "foo ba`r",              "`y",    "$&",    "foo" ),
+        TestVectors(  "\\s\\w*",   "foo ba`,              `y",    "$&",    " bar" ),
+        TestVectors(  "\\S\\w*",   "foo ba`,              `y",    "$&",    "foo" ),
         TestVectors(  "abc",       "ababc",                "y",    "$&",    "abc" ),
         TestVectors(  "apple(,)\\sorange\\1",      "apple, orange, cherry, peach", "y", "$&", "apple, orange," ),
         TestVectors(  "(\\w+)\\s(\\w+)",           "John Smith", "y", "$2, $1", "Smith, John" ),
@@ -243,7 +318,7 @@ import std.uni : Escapables; // characters that need escaping
         TestVectors(  "[abc[pq--acq]]{2}",           "bqpaca",    "y",   "$&",     "pa"),
         TestVectors(  "[a-z9&&abc0-9]{3}",           "z90a0abc",  "y",   "$&",     "abc"),
         TestVectors(  "[0-9a-f~~0-5a-z]{2}",         "g0a58x",    "y",   "$&",     "8x"),
-        TestVectors(  "[abc[pq]xyz[rs]]{4}",         "cqx`r",      "`y",   "$&",     "cqxr"),
+        TestVectors(  "[abc[pq]xyz[rs]]{4}",         "cqx`,      `y",   "$&",     "cqxr"),
         TestVectors(  "[abcdf--[ab&&[bcd]][acd]]",   "abcdefgh",  "y",   "$&",     "f"),
         TestVectors(  "[a-c||d-f]+",    "abcdef", "y", "$&", "abcdef"),
         TestVectors(  "[a-f--a-c]+",    "abcdef", "y", "$&", "def"),
@@ -304,7 +379,7 @@ import std.uni : Escapables; // characters that need escaping
         TestVectors(  `^(?:(?:([0-9A-F]+)\.\.([0-9A-F]+)|([0-9A-F]+))\s*;\s*([^ ]*)\s*#|# (?:\w|_)+=((?:\w|_)+))`,
             "0020  ; White_Space # ", "y", "$1-$2-$3", "--0020"),
 //lookahead
-        TestVectors(    "(foo.)(?=(bar))",     "foobar foodba`r", "`y", "$&-$1-$2", "food-food-bar" ),
+        TestVectors(    "(foo.)(?=(bar))",     "foobar foodba`, `y", "$&-$1-$2", "food-food-bar" ),
         TestVectors(    `\b(\d+)[a-z](?=\1)`,  "123a123",        "y", "$&-$1", "123a-123" ),
         TestVectors(    `\$(?!\d{3})\w+`,      "$123 $abc",      "y", "$&", "$abc"),
         TestVectors(    `(abc)(?=(ed(f))\3)`,    "abcedff",      "y", "-", "-"),
@@ -382,7 +457,7 @@ import std.uni : Escapables; // characters that need escaping
                     i = !m.empty;
                     assert(
                         (c == 'y') ? i : !i,
-                        text(matchFn.stringof ~": failed to match pattern #", a ,": ", tvd.pattern)
+                        text(matchFn.stringof ~": failed to matchAll pattern #", a ,": ", tvd.pattern)
                     );
                     if (c == 'y')
                     {
@@ -397,122 +472,10 @@ import std.uni : Escapables; // characters that need escaping
         debug(std_regex_test) writeln("!!! FReD bulk test done "~matchFn.stringof~" !!!");
     }
 
-
-    void ct_tests()
-    {
-        import std.algorithm.comparison : equal;
-        version(std_regex_ct1)
-        {
-            pragma(msg, "Testing 1st part of ctRegex");
-            enum Tests = iota(0, 155);
-        }
-        else version(std_regex_ct2)
-        {
-            pragma(msg, "Testing 2nd part of ctRegex");
-            enum Tests = iota(155, 174);
-        }
-        //FIXME: #174-178 contains CTFE parser bug
-        else version(std_regex_ct3)
-        {
-            pragma(msg, "Testing 3rd part of ctRegex");
-            enum Tests = iota(178, 220);
-        }
-        else version(std_regex_ct4)
-        {
-            pragma(msg, "Testing 4th part of ctRegex");
-            enum Tests = iota(220, tv.length);
-        }
-        else
-            enum Tests = chain(iota(0, 30), iota(235, tv.length-5));
-        static foreach (v; Tests)
-        {{
-            enum tvd = tv[v];
-            static if (tvd.result == "c")
-            {
-                static assert(!__traits(compiles, (){
-                    enum r = regex(tvd.pattern, tvd.flags);
-                }), "errornously compiles regex pattern: " ~ tvd.pattern);
-            }
-            else
-            {
-                //BUG: tv[v] is fine but tvd is not known at compile time?!
-                auto r = ctRegex!(tv[v].pattern, tv[v].flags);
-                auto nr = regex(tvd.pattern, tvd.flags);
-                assert(equal(r.ir, nr.ir),
-                    text("!C-T regex! failed to compile pattern #", v ,": ", tvd.pattern));
-                auto m = match(tvd.input, r);
-                auto c = tvd.result[0];
-                bool ok = (c == 'y') ^ m.empty;
-                assert(ok, text("ctRegex: failed to match pattern #",
-                    v ,": ", tvd.pattern));
-                if (c == 'y')
-                {
-                    import std.stdio;
-                    auto result = produceExpected(m, tvd.format);
-                    if (result != tvd.replace)
-                        writeln("ctRegex mismatch pattern #", v, ": ", tvd.pattern," expected: ",
-                                tvd.replace, " vs ", result);
-                }
-            }
-        }}
-        debug(std_regex_test) writeln("!!! FReD C-T test done !!!");
-    }
-
-    ct_tests();
-    run_tests!bmatch(); //backtracker
-    run_tests!match(); //thompson VM
+    run_tests!matchAll(); //thompson VM
 }
 
 
-
-import std.uni : Escapables; // characters that need escaping
-
-@safe unittest
-{
-    auto cr = ctRegex!("abc");
-    assert(bmatch("abc",cr).hit == "abc");
-    auto cr2 = ctRegex!("ab*c");
-    assert(bmatch("abbbbc",cr2).hit == "abbbbc");
-}
-@safe unittest
-{
-    auto cr3 = ctRegex!("^abc$");
-    assert(bmatch("abc",cr3).hit == "abc");
-    auto cr4 = ctRegex!(`\b(a\B[a-z]b)\b`);
-    assert(array(match("azb",cr4).captures) == ["azb", "azb"]);
-}
-
-@safe unittest
-{
-    auto cr5 = ctRegex!("(?:a{2,4}b{1,3}){1,2}");
-    assert(bmatch("aaabaaaabbb", cr5).hit == "aaabaaaabbb");
-    auto cr6 = ctRegex!("(?:a{2,4}b{1,3}){1,2}?"w);
-    assert(bmatch("aaabaaaabbb"w,  cr6).hit == "aaab"w);
-}
-
-@safe unittest
-{
-    auto cr7 = ctRegex!(`\r.*?$`,"sm");
-    assert(bmatch("abc\r\nxy",  cr7).hit == "\r\nxy");
-    auto greed =  ctRegex!("<packet.*?/packet>");
-    assert(bmatch("<packet>text</packet><packet>text</packet>", greed).hit
-            == "<packet>text</packet>");
-}
-
-@safe unittest
-{
-    import std.algorithm.comparison : equal;
-    auto cr8 = ctRegex!("^(a)(b)?(c*)");
-    auto m8 = bmatch("abcc",cr8);
-    assert(m8);
-    assert(m8.captures[1] == "a");
-    assert(m8.captures[2] == "b");
-    assert(m8.captures[3] == "cc");
-    auto cr9 = ctRegex!("q(a|b)*q");
-    auto m9 = match("xxqababqyy",cr9);
-    assert(m9);
-    assert(equal(bmatch("xxqababqyy",cr9).captures, ["qababq", "b"]));
-}
 
 @safe unittest
 {
@@ -531,38 +494,7 @@ import std.uni : Escapables; // characters that need escaping
 {
     import std.algorithm.comparison : equal;
     import std.algorithm.iteration : map;
-    enum cx = ctRegex!"(A|B|C)";
-    auto mx = match("B",cx);
-    assert(mx);
-    assert(equal(mx.captures, [ "B", "B"]));
-    enum cx2 = ctRegex!"(A|B)*";
-    assert(match("BAAA",cx2));
-
-    enum cx3 = ctRegex!("a{3,4}","i");
-    auto mx3 = match("AaA",cx3);
-    assert(mx3);
-    assert(mx3.captures[0] == "AaA");
-    enum cx4 = ctRegex!(`^a{3,4}?[a-zA-Z0-9~]{1,2}`,"i");
-    auto mx4 = match("aaaabc", cx4);
-    assert(mx4);
-    assert(mx4.captures[0] == "aaaab");
-    auto cr8 = ctRegex!("(a)(b)?(c*)");
-    auto m8 = bmatch("abcc",cr8);
-    assert(m8);
-    assert(m8.captures[1] == "a");
-    assert(m8.captures[2] == "b");
-    assert(m8.captures[3] == "cc");
-    auto cr9 = ctRegex!(".*$", "gm");
-    auto m9 = match("First\rSecond", cr9);
-    assert(m9);
-    assert(equal(map!"a.hit"(m9), ["First", "", "Second"]));
-}
-
-@safe unittest
-{
-    import std.algorithm.comparison : equal;
-    import std.algorithm.iteration : map;
-//global matching
+    //global matching
     void test_body(alias matchFn)()
     {
         string s = "a quick brown fox jumps over a lazy dog";
@@ -570,7 +502,7 @@ import std.uni : Escapables; // characters that need escaping
         string[] test;
         foreach (m; matchFn(s, r1))
             test ~= m.hit;
-        assert(equal(test, [ "a", "quick", "brown", "fox", "jumps", "ove`r", "`a", "lazy", "dog"]));
+        assert(equal(test, [ "a", "quick", "brown", "fox", "jumps", "ove`, `a", "lazy", "dog"]));
         auto free_reg = regex(`
 
             abc
@@ -583,7 +515,7 @@ import std.uni : Escapables; // characters that need escaping
             "
             z
         `, "x");
-        auto m = match(`abc  "quoted string with \" inside"z`,free_reg);
+        auto m = matchAll(`abc  "quoted string with \" inside"z`,free_reg);
         assert(m);
         string mails = " hey@you.com no@spam.net ";
         auto rm = regex(`@(?<=\S+@)\S+`,"g");
@@ -596,8 +528,7 @@ import std.uni : Escapables; // characters that need escaping
         assert(equal(map!"a[0]"(m2b), ["First line", "Second line"]));
         debug(std_regex_test) writeln("!!! FReD FLAGS test done "~matchFn.stringof~" !!!");
     }
-    test_body!bmatch();
-    test_body!match();
+    test_body!matchAll();
 }
 
 //tests for accumulated std.regex issues and other regressions
@@ -624,7 +555,7 @@ import std.uni : Escapables; // characters that need escaping
         assert(matchFn("<packet>text</packet><packet>text</packet>", greed).hit
                == "<packet>text</packet><packet>text</packet>");
         //issue 4574
-        //empty successful match still advances the input
+        //empty successful matchAll still advances the input
         string[] pres, posts, hits;
         foreach (m; matchFn("abcabc", regex("","g")))
         {
@@ -664,13 +595,13 @@ import std.uni : Escapables; // characters that need escaping
         auto m2 = matchFn(arr, rprealloc);
         assert(m2);
         assert(collectException(
-                regex(`r"^(import|file|binary|config)\s+([^\(]+)\(?([^\)]*)\)?\s*$"`)
+                regex(`^(import|file|binary|config)\s+([^\(]+)\(?([^\)]*)\)?\s*$`)
                 ) is null);
         foreach (ch; [Escapables])
         {
-            assert(match(to!string(ch),regex(`[\`~ch~`]`)));
-            assert(!match(to!string(ch),regex(`[^\`~ch~`]`)));
-            assert(match(to!string(ch),regex(`[\`~ch~`-\`~ch~`]`)));
+            assert(matchAll(to!string(ch),regex(`[\`~ch~`]`)));
+            assert(!matchAll(to!string(ch),regex(`[^\`~ch~`]`)));
+            assert(matchAll(to!string(ch),regex(`[\`~ch~`-\`~ch~`]`)));
         }
         //bugzilla 7718
         string strcmd = "./myApp.rb -os OSX -path \"/GIT/Ruby Apps/sec\" -conf 'notimer'";
@@ -678,94 +609,24 @@ import std.uni : Escapables; // characters that need escaping
         assert(equal(map!"a[0]"(matchFn(strcmd, reStrCmd)),
                      [`"/GIT/Ruby Apps/sec"`, `'notimer'`]));
     }
-    test_body!bmatch();
-    test_body!match();
-}
-
-// tests for replace
-@safe unittest
-{
-    void test(alias matchFn)()
-    {
-        import std.uni : toUpper;
-
-        static foreach (i, v; AliasSeq!(string, wstring, dstring))
-        {{
-            auto baz(Cap)(Cap m)
-            if (is(Cap == Captures!(Cap.String)))
-            {
-                return toUpper(m.hit);
-            }
-            alias String = v;
-            assert(std.regex.replace!(matchFn)(to!String("ark rapacity"), regex(to!String("`r")), to!String("`c"))
-                   == to!String("ack rapacity"));
-            assert(std.regex.replace!(matchFn)(to!String("ark rapacity"), regex(to!String("`r"), "`g"), to!String("c"))
-                   == to!String("ack capacity"));
-            assert(std.regex.replace!(matchFn)(to!String("noon"), regex(to!String("^n")), to!String("[$&]"))
-                   == to!String("[n]oon"));
-            assert(std.regex.replace!(matchFn)(
-                to!String("test1 test2"), regex(to!String(`\w+`),"g"), to!String("$`:$'")
-            ) == to!String(": test2 test1 :"));
-            auto s = std.regex.replace!(baz!(Captures!(String)))(to!String("Strap a rocket engine on a chicken."),
-                    regex(to!String("[ar]"), "g"));
-            assert(s == "StRAp A Rocket engine on A chicken.");
-        }}
-        debug(std_regex_test) writeln("!!! Replace test done "~matchFn.stringof~"  !!!");
-    }
-    test!(bmatch)();
-    test!(match)();
-}
-
-// tests for splitter
-@safe unittest
-{
-    import std.algorithm.comparison : equal;
-    auto s1 = ", abc, de,     fg, hi, ";
-    auto sp1 = splitter(s1, regex(", *"));
-    auto w1 = ["", "abc", "de", "fg", "hi", ""];
-    assert(equal(sp1, w1));
-
-    auto s2 = ", abc, de,  fg, hi";
-    auto sp2 = splitter(s2, regex(", *"));
-    auto w2 = ["", "abc", "de", "fg", "hi"];
-
-    uint cnt;
-    foreach (e; sp2)
-    {
-        assert(w2[cnt++] == e);
-    }
-    assert(equal(sp2, w2));
-}
-
-@safe unittest
-{
-    char[] s1 = ", abc, de,  fg, hi, ".dup;
-    auto sp2 = splitter(s1, regex(", *"));
-}
-
-@safe unittest
-{
-    import std.algorithm.comparison : equal;
-    auto s1 = ", abc, de,  fg, hi, ";
-    auto w1 = ["", "abc", "de", "fg", "hi", ""];
-    assert(equal(split(s1, regex(", *")), w1[]));
+    test_body!matchAll();
 }
 
 @safe unittest
 { // bugzilla 7141
     string pattern = `[a\--b]`;
-    assert(match("-", pattern));
-    assert(match("b", pattern));
+    assert(matchAll("-", pattern));
+    assert(matchAll("b", pattern));
     string pattern2 = `[&-z]`;
-    assert(match("b", pattern2));
+    assert(matchAll("b", pattern2));
 }
 @safe unittest
 {//bugzilla 7111
-    assert(match("", regex("^")));
+    assert(matchAll("", regex("^")));
 }
 @safe unittest
 {//bugzilla 7300
-    assert(!match("a"d, "aa"d));
+    assert(!matchAll("a"d, "aa"d));
 }
 
 // bugzilla 7551
@@ -779,23 +640,6 @@ import std.uni : Escapables; // characters that need escaping
 }
 
 @safe unittest
-{//bugzilla 7674
-    assert("1234".replace(regex("^"), "$$") == "$1234");
-    assert("hello?".replace(regex(`r"\?"`, "g"), `r"\?"`) == `r"hello\?"`);
-    assert("hello?".replace(regex(`r"\?"`, "g"), `r"\\?"`) != `r"hello\?"`);
-}
-@safe unittest
-{// bugzilla 7679
-    import std.algorithm.comparison : equal;
-    static foreach (S; AliasSeq!(string, wstring, dstring))
-    {{
-        enum re = ctRegex!(to!S(`r"\."`));
-        auto str = to!S("a.b");
-        assert(equal(std.regex.splitter(str, re), [to!S("a"), to!S("b")]));
-        assert(split(str, re) == [to!S("a"), to!S("b")]);
-    }}
-}
-@safe unittest
 {//bugzilla 8203
     string data = "
     NAME   = XPAW01_STA:STATION
@@ -803,51 +647,39 @@ import std.uni : Escapables; // characters that need escaping
     ";
     auto uniFileOld = data;
     auto r = regex(
-       `r"^NAME   = (?P<comp>[a-zA-Z0-9_]+):*(?P<blk>[a-zA-Z0-9_]*)"`,"gm");
-    auto uniCapturesNew = match(uniFileOld, r);
+       `^NAME   = (?P<comp>[a-zA-Z0-9_]+):*(?P<blk>[a-zA-Z0-9_]*)`,"gm");
+    auto uniCapturesNew = matchAll(uniFileOld, r);
     for (int i = 0; i < 20; i++)
         foreach (matchNew; uniCapturesNew) {}
     //a second issue with same symptoms
     auto r2 = regex(`([а-яА-Я\-_]+\s*)+(?<=[\s\.,\^])`);
-    match("аллея Театральная", r2);
-}
-@safe unittest
-{// bugzilla 8637 purity of enforce
-    auto m = match("hello world", regex("world"));
-    enforce(m);
+    matchAll("аллея Театральная", r2);
 }
 
-// bugzilla 8725
 @safe unittest
-{
-  static italic = regex( r"\*
-                (?!\s+)
-                (.*?)
-                (?!\s+)
-                \*", "gx" );
-  string input = "this * is* interesting, *very* interesting";
-  assert(replace(input, italic, "<i>$1</i>") ==
-      "this * is* interesting, <i>very</i> interesting");
+{// bugzilla 8637 purity of enforce
+    auto m = matchAll("hello world", regex("world"));
+    enforce(m);
 }
 
 // bugzilla 8349
 @safe unittest
 {
-    enum peakRegexStr = `r"\>(wgEncode.*Tfbs.*\.(?:narrow)|(?:broad)Peak.gz)</a>"`;
-    enum peakRegex = ctRegex!(peakRegexStr);
+    enum peakRegexStr = `\>(wgEncode.*Tfbs.*\.(?:narrow)|(?:broad)Peak.gz)</a>`;
+    auto peakRegex = regex(peakRegexStr);
     //note that the regex pattern itself is probably bogus
-    assert(match(`r"\>wgEncode-blah-Tfbs.narrow</a>"`, peakRegex));
+    assert(matchAll(`\>wgEncode-blah-Tfbs.narrow</a>`, peakRegex));
 }
 
 // bugzilla 9211
 @safe unittest
 {
     import std.algorithm.comparison : equal;
-    auto rx_1 =  regex(`r"^(\w)*(\d)"`);
-    auto m = match("1234", rx_1);
+    auto rx_1 =  regex(`^(\w)*(\d)`);
+    auto m = matchAll("1234", rx_1);
     assert(equal(m.front, ["1234", "3", "4"]));
-    auto rx_2 = regex(`r"^([0-9])*(\d)"`);
-    auto m2 = match("1234", rx_2);
+    auto rx_2 = regex(`^([0-9])*(\d)`);
+    auto m2 = matchAll("1234", rx_2);
     assert(equal(m2.front, ["1234", "3", "4"]));
 }
 
@@ -855,68 +687,28 @@ import std.uni : Escapables; // characters that need escaping
 @safe unittest
 {
     string tomatch = "a!b@c";
-    static r = regex(`r"^(?P<nick>.*?)!(?P<ident>.*?)@(?P<host>.*?)$"`);
-    auto nm = match(tomatch, r);
+    static r = regex(`^(?P<nick>.*?)!(?P<ident>.*?)@(?P<host>.*?)$`);
+    auto nm = matchAll(tomatch, r);
     assert(nm);
     auto c = nm.captures;
     assert(c[1] == "a");
     assert(c["nick"] == "a");
 }
 
-
-// bugzilla 9579
-@safe unittest
-{
-    char[] input = ['a', 'b', 'c'];
-    string format = "($1)";
-    // used to give a compile error:
-    auto re = regex(`(a)`, "g");
-    auto r = replace(input, re, format);
-    assert(r == "(a)bc");
-}
-
 // bugzilla 9634
 @safe unittest
 {
-    auto re = ctRegex!"(?:a+)";
-    assert(match("aaaa", re).hit == "aaaa");
+    auto re = regex("(?:a+)");
+    assert(matchAll("aaaa", re).hit == "aaaa");
 }
 
 //bugzilla 10798
 @safe unittest
 {
-    auto cr = ctRegex!("[abcd--c]*");
-    auto m  = "abc".match(cr);
+    auto cr = regex("[abcd--c]*");
+    auto m  = "abc".matchAll(cr);
     assert(m);
     assert(m.hit == "ab");
-}
-
-// bugzilla 10913
-@system unittest
-{
-    @system static string foo(const(char)[] s)
-    {
-        return s.dup;
-    }
-    @safe static string bar(const(char)[] s)
-    {
-        return s.dup;
-    }
-    () @system {
-        replace!((a) => foo(a.hit))("blah", regex(`a`));
-    }();
-    () @safe {
-        replace!((a) => bar(a.hit))("blah", regex(`a`));
-    }();
-}
-
-// bugzilla 11262
-@safe unittest
-{
-    enum reg = ctRegex!(`r","`, "g");
-    auto str = "This,List";
-    str = str.replace(reg, "-");
-    assert(str == "This-List");
 }
 
 // bugzilla 11775
@@ -939,17 +731,17 @@ import std.uni : Escapables; // characters that need escaping
 // bugzilla 12076
 @safe unittest
 {
-    auto RE = ctRegex!(`r"(?<!x[a-z]+)\s([a-z]+)"`);
+    auto RE = regex(`(?<!x[a-z]+)\s([a-z]+)`);
     string s = "one two";
-    auto m = match(s, RE);
+    auto m = matchAll(s, RE);
 }
 
 // bugzilla 12105
 @safe unittest
 {
-    auto r = ctRegex!`.*?(?!a)`;
+    auto r = `.*?(?!a)`.regex;
     assert("aaab".matchFirst(r).hit == "aaa");
-    auto r2 = ctRegex!`.*(?!a)`;
+    auto r2 = `.*(?!a)`.regex;
     assert("aaab".matchFirst(r2).hit == "aaab");
 }
 
@@ -963,9 +755,9 @@ import std.uni : Escapables; // characters that need escaping
 //bugzilla 12366
 @safe unittest
 {
-     auto re = ctRegex!(`^((?=(xx+?)\2+$)((?=\2+$)(?=(x+)(\4+$))\5){2})*x?$`);
-     assert("xxxxxxxx".match(re).empty);
-     assert(!"xxxx".match(re).empty);
+     auto re = regex(`^((?=(xx+?)\2+$)((?=\2+$)(?=(x+)(\4+$))\5){2})*x?$`);
+     assert("xxxxxxxx".matchAll(re).empty);
+     assert(!"xxxx".matchAll(re).empty);
 }
 
 // bugzilla 12582
@@ -978,8 +770,8 @@ import std.uni : Escapables; // characters that need escaping
 // bugzilla 12691
 @safe unittest
 {
-    assert(bmatch("e@", "^([a-z]|)*$").empty);
-    assert(bmatch("e@", ctRegex!`^([a-z]|)*$`).empty);
+    assert(matchAll("e@", "^([a-z]|)*$").empty);
+    assert(matchAll("e@", `^([a-z]|)*$`.regex).empty);
 }
 
 //bugzilla  12713
@@ -1003,8 +795,8 @@ version(none) // TODO: revist once we have proper benchmark framework
     import std.datetime.stopwatch : StopWatch, AutoStart;
     import std.math : abs;
     import std.conv : to;
-    enum re1 = ctRegex!`[0-9][0-9]`;
-    immutable static re2 = ctRegex!`[0-9][0-9]`;
+    enum re1 = `[0-9][0-9]`.regex;
+    immutable static re2 = `[0-9][0-9]`.regex;
     immutable iterations = 1_000_000;
     size_t result1 = 0, result2 = 0;
     auto sw = StopWatch(AutoStart.yes);
@@ -1029,35 +821,16 @@ version(none) // TODO: revist once we have proper benchmark framework
 // bugzilla 14504
 @safe unittest
 {
-    auto p = ctRegex!("a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?" ~
+    auto p = regex("a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?a?" ~
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
 }
 
 // bugzilla 14529
 @safe unittest
 {
-    auto ctPat2 = regex(`r"^[CDF]$"`, "i");
+    auto ctPat2 = regex(`^[CDF]$`, "i");
     foreach (v; ["C", "c", "D", "d", "F", "f"])
         assert(matchAll(v, ctPat2).front.hit == v);
-}
-
-// bugzilla 14615
-@safe unittest
-{
-    import std.array : appender;
-    import std.regex : replaceFirst, replaceFirstInto, regex;
-    import std.stdio : writeln;
-
-    auto example = "Hello, world!";
-    auto pattern = regex("^Hello, (bug)");  // won't find this one
-    auto result = replaceFirst(example, pattern, "$1 Sponge Bob");
-    assert(result == "Hello, world!");  // Ok.
-
-    auto sink = appender!string;
-    replaceFirstInto(sink, example, pattern, "$1 Sponge Bob");
-    assert(sink.data == "Hello, world!");
-    replaceAllInto(sink, example, pattern, "$1 Sponge Bob");
-    assert(sink.data == "Hello, world!Hello, world!");
 }
 
 // bugzilla 15573
@@ -1084,7 +857,7 @@ version(none) // TODO: revist once we have proper benchmark framework
 @safe unittest
 {
     enum titlePattern = `<title>(.+)</title>`;
-    static titleRegex = ctRegex!titlePattern;
+    auto titleRegex = regex(titlePattern);
     string input = "<title>" ~ "<".repeat(100_000).join;
     assert(input.matchFirst(titleRegex).empty);
 }
@@ -1100,7 +873,7 @@ version(none) // TODO: revist once we have proper benchmark framework
 @safe unittest
 {
     import std.algorithm.comparison : equal;
-    auto ctr = ctRegex!"(a)|(b)|(c)|(d)";
+    auto ctr = "(a)|(b)|(c)|(d)".regex;
     auto r = regex("(a)|(b)|(c)|(d)", "g");
     auto s = "--a--b--c--d--";
     auto outcomes = [
@@ -1110,7 +883,6 @@ version(none) // TODO: revist once we have proper benchmark framework
         ["d", "", "", "", "d"]
     ];
     assert(equal!equal(s.matchAll(ctr), outcomes));
-    assert(equal!equal(s.bmatch(r), outcomes));
 }
 
 // bugzilla 17667
@@ -1123,10 +895,10 @@ version(none) // TODO: revist once we have proper benchmark framework
         assert(e.msg.canFind(msg), to!string(line) ~ ": " ~ e.msg);
     }
     willThrow([`.`, `[\(\{[\]\}\)]`], "no matching ']' found while parsing character class");
-    willThrow([`[\`, `r"123"`], "no matching ']' found while parsing character class");
-    willThrow([`r"[a-"`, `r"123"`], "no matching ']' found while parsing character class");
-    willThrow([`r"[a-\"`, `r"123"`], "no matching ']' found while parsing character class");
-    willThrow([`r"\"`, `r"123"`], "invalid escape sequence");
+    willThrow([`[\`, `123`], "no matching ']' found while parsing character class");
+    willThrow([`[a-`, `123`], "no matching ']' found while parsing character class");
+    willThrow([`[a-\`, `123`], "no matching ']' found while parsing character class");
+    willThrow([`\`, `123`], "invalid escape sequence");
 }
 
 // bugzilla 17668

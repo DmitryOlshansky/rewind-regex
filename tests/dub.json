@@ -1,0 +1,13 @@
+{
+    "name": "rewind-regex-testkit",
+    "authors": [
+        "Dmitry Olshansky"
+    ],
+    "dependencies" : {
+        "rewind-regex" : { "path" : ".." }
+    },
+    "targetType": "executable",
+    "description": "A testsuite for REwind Regex library",
+    "copyright": "Copyright © 2018, Dmitry Olshansky",
+    "license": "Boost"
+}
