@@ -6,6 +6,4 @@ matrix:
       script:
         - dub test
         - bash -c "cd tests && dub test"
-    - d: dmd
-    - d: gdc
     - d: ldc
