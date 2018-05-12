@@ -1,37 +1,21 @@
-## Welcome to GitHub Pages
+## REwind Regex
 
-You can use the [editor on GitHub](https://github.com/DmitryOlshansky/rewind-regex/edit/master/README.md) to maintain and preview the content for your website in Markdown files.
+REwind Regex is designed to be a simpler, more innovative alternative to std.regex library.
+Unleashed from contraints of std.library REwind Regex aims to provide greater speeds and
+streaming capabilities, sacrificing complex features for more powerful use cases.
 
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
+That being said most easy wins battle tested in REwind Regex would eventually be backported.
 
-### Markdown
+In general - pick std.regex if:
+- need stability over performance
+- compile-time regex (if you have patience and RAM to afford it)
+- need backreferences
+- love helpers such as splitter, replaceFirst/replaceAll etc.
 
-Markdown is a lightweight and easy-to-use syntax for styling your writing. It includes conventions for
+Try REwind Regex if your use case is:
+- @nogc (in the future)
+- grep-like tool or search engine
+- streaming (related to previous point)
+- performance is more important then having e.g. backreference
+- hate useless cruft that you can easily implement yourself
 
-```markdown
-Syntax highlighted code block
-
-# Header 1
-## Header 2
-### Header 3
-
-- Bulleted
-- List
-
-1. Numbered
-2. List
-
-**Bold** and _Italic_ and `Code` text
-
-[Link](url) and ![Image](src)
-```
-
-For more details see [GitHub Flavored Markdown](https://guides.github.com/features/mastering-markdown/).
-
-### Jekyll Themes
-
-Your Pages site will use the layout and styles from the Jekyll theme you have selected in your [repository settings](https://github.com/DmitryOlshansky/rewind-regex/settings). The name of this theme is saved in the Jekyll `_config.yml` configuration file.
-
-### Support or Contact
-
-Having trouble with Pages? Check out our [documentation](https://help.github.com/categories/github-pages-basics/) or [contact support](https://github.com/contact) and we’ll help you sort it out.
