@@ -186,40 +186,9 @@ int lengthOfIR(IR i)
     return 1 + immediateParamsIR(i);
 }
 
-//full length of the paired IR instruction inlcuding all parameters that might follow it
-int lengthOfPairedIR(IR i)
-{
-    return 1 + immediateParamsIR(pairedIR(i));
-}
-
-//if the operation has a merge point (this relies on the order of the ops)
-bool hasMerge(IR i)
-{
-    return (i&0b11)==0b10 && i <= IR.RepeatQEnd;
-}
-
-//is an IR that opens a "group"
-bool isStartIR(IR i)
-{
-    return (i&0b11)==0b01;
-}
-
-//is an IR that ends a "group"
-bool isEndIR(IR i)
-{
-    return (i&0b11)==0b10;
-}
-
-//is a standalone IR
-bool isAtomIR(IR i)
-{
-    return (i&0b11)==0b00;
-}
-
 //makes respective pair out of IR i, swapping start/end bits of instruction
 IR pairedIR(IR i)
 {
-    assert(isStartIR(i) || isEndIR(i));
     return cast(IR) (i ^ 0b11);
 }
 
@@ -271,16 +240,17 @@ struct Bytecode
     @property IR code()() const { return cast(IR)(raw >> 24); }
 
     //ditto
-    @property bool hotspot() const { return hasMerge(code); }
+    @property bool hotspot() const { return (code&0b11) == 0b10 && code <= IR.RepeatQEnd; }
 
     //test the class of this instruction
-    @property bool isAtom() const { return isAtomIR(code); }
+    // standalone instruction
+    @property bool isAtom() const { return (code&0b11) == 0b00; }
 
-    //ditto
-    @property bool isStart() const { return isStartIR(code); }
+    // start of block such as loop
+    @property bool isStart() const { return (code&0b11) == 0b01; }
 
-    //ditto
-    @property bool isEnd() const { return isEndIR(code); }
+    // end of block
+    @property bool isEnd() const { return (code&0b11) == 0b10; }
 
     //number of arguments for this instruction
     @property int args() const { return immediateParamsIR(code); }
@@ -329,7 +299,7 @@ struct Bytecode
     //full length of respective start/end of this instruction
     @property uint pairedLength() const
     {
-        return lengthOfPairedIR(code);
+        return 1 + immediateParamsIR(pairedIR(code));
     }
 
     //returns bytecode of paired instruction (assuming this one is start or end)
@@ -343,7 +313,7 @@ struct Bytecode
     uint indexOfPair(uint pc) const
     {
         assert(isStart || isEnd);
-        return isStart ? pc + data + length  : pc - data - lengthOfPairedIR(code);
+        return isStart ? pc + data + length  : pc - data - pairedLength;
     }
 }
 
