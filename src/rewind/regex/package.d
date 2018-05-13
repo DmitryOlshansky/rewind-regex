@@ -3,8 +3,8 @@
   are a commonly used method of pattern matching
   on strings, with $(I regex) being a catchy word for a pattern in this domain
   specific language. Typical problems usually solved by regular expressions
-  include validation of user input and the ubiquitous find $(AMP) replace
-  in text processing utilities.
+  include validation of user input, deep packet inspection and 
+  the ubiquitous find $(AMP) replace in text processing tools and IDEs.
 
   $(SECTION Synopsis)
   ---
@@ -13,7 +13,7 @@
   void main()
   {
       // Print out all possible dd/mm/yy(yy) dates found in user input.
-      auto r = regex(r"\b[0-9][0-9]?/[0-9][0-9]?/[0-9][0-9](?:[0-9][0-9])?\b");
+      auto r = regex(`\b[0-9][0-9]?/[0-9][0-9]?/[0-9][0-9](?:[0-9][0-9])?\b`);
       foreach (line; stdin.byLine)
       {
         // matchAll() returns a range that can be iterated
@@ -22,16 +22,6 @@
             writeln(c.hit);
       }
   }
-  ...
-
-  // Create a static regex at compile-time, which contains fast native code.
-  auto ctr = ctRegex!(`^.*/([^/]+)/?$`);
-
-  // It works just like a normal regex:
-  auto c2 = matchFirst("foo/bar", ctr);   // First match found here, if any
-  assert(!c2.empty);   // Be sure to check if there is a match before examining contents!
-  assert(c2[1] == "bar");   // Captures is a range of submatches: 0 = full match.
-
   ...
   // multi-pattern regex
   auto multi = regex([`\d+,\d+`,`(a-z]+):(\d+)`]);
@@ -235,11 +225,11 @@
     $(LREF replaceFirstInto) and $(LREF replaceAllInto) could come in handy
     as functions that  avoid allocations even for replacement.
 
-    Copyright: Copyright Dmitry Olshansky, 2018-
+  Copyright: Copyright Dmitry Olshansky, 2018-
 
   License: $(HTTP boost.org/LICENSE_1_0.txt, Boost License 1.0).
 
-  Authors: Dmitry Olshansky,
+  Authors: Dmitry Olshansky
 
 Macros:
     REG_ROW = $(TR $(TD $(I $1 )) $(TD $+) )
@@ -248,7 +238,7 @@ Macros:
     REG_START = <h3><div align="center"> $0 </div></h3>
     SECTION = <h3><a id="$1" href="#$1" class="anchor">$0</a></h3>
     S_LINK = <a href="#$1">$+</a>
- +/
++/
 module rewind.regex;
 
 import std.range.primitives, std.traits;
@@ -454,6 +444,7 @@ public:
             _refcount++;
         }
     }
+
     ~this()
     {
         import core.stdc.stdlib : free;
@@ -577,9 +568,6 @@ public:
 
     ///Number of matches in this object.
     @property size_t length() const { return _nMatch == 0 ? 0 : _b - _f;  }
-
-    ///A hook for compatibility with original rewind.regex.
-    @property ref captures(){ return this; }
 
     void opAssign()(auto ref Captures rhs)
     {
@@ -716,9 +704,6 @@ public:
 
     ///Same as !(x.empty), provided for its convenience  in conditional statements.
     T opCast(T:bool)(){ return !empty; }
-
-    /// Same as .front, provided for compatibility with original rewind.regex.
-    @property inout(Captures!R) captures() inout { return _captures; }
 }
 
 private @trusted auto matchOnce(RegEx, R)(R input, const auto ref RegEx prog)
@@ -735,23 +720,6 @@ private @trusted auto matchOnce(RegEx, R)(R input, const auto ref RegEx prog)
 private auto matchMany(RegEx, R)(R input, auto ref RegEx re) @safe
 {
     return RegexMatch!R(input, re.withFlags(re.flags | RegexOption.global));
-}
-
-@system unittest
-{
-    //sanity checks for new API
-    auto re = regex("abc");
-    assert(!"abc".matchOnce(re).empty);
-    assert("abc".matchOnce(re)[0] == "abc");
-}
-
-// https://issues.dlang.org/show_bug.cgi?id=18135
-@system unittest
-{
-    static struct MapResult { RegexMatch!string m; }
-    MapResult m;
-    m = MapResult();
-    assert(m == m);
 }
 
 /++

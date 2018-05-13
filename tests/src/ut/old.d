@@ -26,8 +26,6 @@ import rewind.regex;
 // produces replacement string from format using captures for substitution
 void replaceFmt(R, Capt, OutR)
     (R format, Capt captures, OutR sink, bool ignoreBadSubs = false)
-if (isOutputRange!(OutR, ElementEncodingType!R[]) &&
-    isOutputRange!(OutR, ElementEncodingType!(Capt.String)[]))
 {
     import std.algorithm.searching : find;
     import std.ascii : isDigit, isAlpha;
@@ -285,8 +283,8 @@ L_Replace_Loop:
         TestVectors(  "\\cJ",      "abc\ndef",             "y",    "$&",    "\n" ),
         TestVectors(  "\\d",       "B2 is",                "y",    "$&",    "2" ),
         TestVectors(  "\\D",       "B2 is",                "y",    "$&",    "B" ),
-        TestVectors(  "\\s\\w*",   "foo ba`,              `y",    "$&",    " bar" ),
-        TestVectors(  "\\S\\w*",   "foo ba`,              `y",    "$&",    "foo" ),
+        TestVectors(  "\\s\\w*",   "foo bar",              "y",    "$&",    " bar" ),
+        TestVectors(  "\\S\\w*",   "foo bar",              "y",    "$&",    "foo" ),
         TestVectors(  "abc",       "ababc",                "y",    "$&",    "abc" ),
         TestVectors(  "apple(,)\\sorange\\1",      "apple, orange, cherry, peach", "y", "$&", "apple, orange," ),
         TestVectors(  "(\\w+)\\s(\\w+)",           "John Smith", "y", "$2, $1", "Smith, John" ),
@@ -417,7 +415,7 @@ L_Replace_Loop:
     string produceExpected(M,String)(auto ref M m, String fmt)
     {
         auto app = appender!(String)();
-        replaceFmt(fmt, m.captures, app, true);
+        replaceFmt(fmt, m, app, true);
         return app.data;
     }
     void run_tests(alias matchFn)()
@@ -429,7 +427,7 @@ L_Replace_Loop:
             String produceExpected(M,Range)(auto ref M m, Range fmt)
             {
                 auto app = appender!(String)();
-                replaceFmt(fmt, m.captures, app, true);
+                replaceFmt(fmt, m.front, app, true);
                 return app.data;
             }
             Regex!(Char) r;
@@ -497,11 +495,14 @@ L_Replace_Loop:
     void test_body(alias matchFn)()
     {
         string s = "a quick brown fox jumps over a lazy dog";
-        auto r1 = regex("\\b[a-z]+\\b","g");
+        auto r1 = regex("\\b[a-z]+\\b");
         string[] test;
         foreach (m; matchFn(s, r1))
             test ~= m.hit;
-        assert(equal(test, [ "a", "quick", "brown", "fox", "jumps", "ove`, `a", "lazy", "dog"]));
+        assert(
+            test.equal([ "a", "quick", "brown", "fox", "jumps", "over", "a", "lazy", "dog"]),
+            text(test)
+        );
         auto free_reg = regex(`
 
             abc
@@ -517,13 +518,13 @@ L_Replace_Loop:
         auto m = matchAll(`abc  "quoted string with \" inside"z`,free_reg);
         assert(m);
         string mails = " hey@you.com no@spam.net ";
-        auto rm = regex(`@(?<=\S+@)\S+`,"g");
+        auto rm = regex(`@(?<=\S+@)\S+`);
         assert(equal(map!"a[0]"(matchFn(mails, rm)), ["@you.com", "@spam.net"]));
-        auto m2 = matchFn("First line\nSecond line",regex(".*$","gm"));
+        auto m2 = matchFn("First line\nSecond line",regex(".*$","m"));
         assert(equal(map!"a[0]"(m2), ["First line", "", "Second line"]));
-        auto m2a = matchFn("First line\nSecond line",regex(".+$","gm"));
+        auto m2a = matchFn("First line\nSecond line",regex(".+$","m"));
         assert(equal(map!"a[0]"(m2a), ["First line", "Second line"]));
-        auto m2b = matchFn("First line\nSecond line",regex(".+?$","gm"));
+        auto m2b = matchFn("First line\nSecond line",regex(".+?$","m"));
         assert(equal(map!"a[0]"(m2b), ["First line", "Second line"]));
         debug(std_regex_test) writeln("!!! FReD FLAGS test done "~matchFn.stringof~" !!!");
     }
@@ -539,10 +540,10 @@ L_Replace_Loop:
     {
         //issue 5857
         //matching goes out of control if ... in (...){x} has .*/.+
-        auto c = matchFn("axxxzayyyyyzd",regex("(a.*z){2}d")).captures;
+        auto c = matchFn("axxxzayyyyyzd",regex("(a.*z){2}d")).front;
         assert(c[0] == "axxxzayyyyyzd");
         assert(c[1] == "ayyyyyz");
-        auto c2 = matchFn("axxxayyyyyd",regex("(a.*){2}d")).captures;
+        auto c2 = matchFn("axxxayyyyyd",regex("(a.*){2}d")).front;
         assert(c2[0] == "axxxayyyyyd");
         assert(c2[1] == "ayyyyy");
         //issue 2108
@@ -556,7 +557,7 @@ L_Replace_Loop:
         //issue 4574
         //empty successful matchAll still advances the input
         string[] pres, posts, hits;
-        foreach (m; matchFn("abcabc", regex("","g")))
+        foreach (m; matchFn("abcabc", regex("")))
         {
             pres ~= m.pre;
             posts ~= m.post;
@@ -604,7 +605,7 @@ L_Replace_Loop:
         }
         //bugzilla 7718
         string strcmd = "./myApp.rb -os OSX -path \"/GIT/Ruby Apps/sec\" -conf 'notimer'";
-        auto reStrCmd = regex (`(".*")|('.*')`, "g");
+        auto reStrCmd = regex (`(".*")|('.*')`);
         assert(equal(map!"a[0]"(matchFn(strcmd, reStrCmd)),
                      [`"/GIT/Ruby Apps/sec"`, `'notimer'`]));
     }
@@ -612,19 +613,20 @@ L_Replace_Loop:
 }
 
 @safe unittest
-{ // bugzilla 7141
+{
+    // bugzilla 7141
     string pattern = `[a\--b]`;
     assert(matchAll("-", pattern));
     assert(matchAll("b", pattern));
     string pattern2 = `[&-z]`;
     assert(matchAll("b", pattern2));
 }
+
 @safe unittest
-{//bugzilla 7111
+{
+    //bugzilla 7111
     assert(matchAll("", regex("^")));
-}
-@safe unittest
-{//bugzilla 7300
+    //bugzilla 7300
     assert(!matchAll("a"d, "aa"d));
 }
 
@@ -646,7 +648,7 @@ L_Replace_Loop:
     ";
     auto uniFileOld = data;
     auto r = regex(
-       `^NAME   = (?P<comp>[a-zA-Z0-9_]+):*(?P<blk>[a-zA-Z0-9_]*)`,"gm");
+       `^NAME   = (?P<comp>[a-zA-Z0-9_]+):*(?P<blk>[a-zA-Z0-9_]*)`,"m");
     auto uniCapturesNew = matchAll(uniFileOld, r);
     for (int i = 0; i < 20; i++)
         foreach (matchNew; uniCapturesNew) {}
@@ -689,7 +691,7 @@ L_Replace_Loop:
     static r = regex(`^(?P<nick>.*?)!(?P<ident>.*?)@(?P<host>.*?)$`);
     auto nm = matchAll(tomatch, r);
     assert(nm);
-    auto c = nm.captures;
+    auto c = nm.front;
     assert(c[1] == "a");
     assert(c["nick"] == "a");
 }
@@ -873,7 +875,7 @@ version(none) // TODO: revist once we have proper benchmark framework
 {
     import std.algorithm.comparison : equal;
     auto ctr = "(a)|(b)|(c)|(d)".regex;
-    auto r = regex("(a)|(b)|(c)|(d)", "g");
+    auto r = regex("(a)|(b)|(c)|(d)");
     auto s = "--a--b--c--d--";
     auto outcomes = [
         ["a", "a", "", "", ""],
@@ -917,4 +919,13 @@ version(none) // TODO: revist once we have proper benchmark framework
     auto c = matchFirst(str, regexp);
     assert(c);
     assert(c.whichPattern == 2);
+}
+
+// https://issues.dlang.org/show_bug.cgi?id=18135
+@system unittest
+{
+    static struct MapResult { RegexMatch!string m; }
+    MapResult m;
+    m = MapResult();
+    assert(m == m);
 }
