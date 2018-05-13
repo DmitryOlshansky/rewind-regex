@@ -1,10 +1,12 @@
 ## REwind Regex
+[![Build Status](https://travis-ci.org/DmitryOlshansky/rewind-regex.svg?branch=master)](https://travis-ci.org/DmitryOlshansky/rewind-regex)
 
 REwind Regex is designed to be a simpler, more innovative alternative to std.regex library.
+
 Unleashed from contraints of std.library REwind Regex aims to provide greater speeds and
 streaming capabilities, sacrificing complex features for more powerful use cases.
 
-That being said most easy wins battle tested in REwind Regex would eventually be backported.
+However most easy improvements that got battle tested in REwind Regex would eventually be backported.
 
 In general - pick std.regex if:
 - need stability over performance
