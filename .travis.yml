@@ -4,6 +4,7 @@ matrix:
   include:
     - d: dmd
       script:
-        - dub test
-        - bash -c "cd tests && dub test"
+        - bash -c "DC=dmd ./test.sh"
     - d: ldc
+      script:
+        - bash -c "DC=ldmd2 ./test.sh"

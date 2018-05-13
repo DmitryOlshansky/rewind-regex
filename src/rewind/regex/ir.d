@@ -653,14 +653,6 @@ package:
 // but may need better place in the future (all internals)
 package:
 
-@system unittest
-{
-    //sanity checks for new API
-    auto re = regex("abc");
-    assert(!"abc".matchOnce(re).empty);
-    assert("abc".matchOnce(re)[0] == "abc");
-}
-
 //Simple UTF-string abstraction compatible with stream interface
 struct Input(Char)
 if (is(Char :dchar))
