@@ -19,7 +19,7 @@ Try REwind Regex if your use case is:
 - streaming with IOpipe library (related to previous point)
 - performance is more important then having e.g. backreference
 - hate useless cruft that you can easily implement yourself
-- 100% @nogc (in the future) once exceptions are tackled by the lanauge
+- 100% @nogc (in the future) once exceptions are tackled by the language
 
 ## Technical details
 
