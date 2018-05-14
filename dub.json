@@ -1,9 +1,12 @@
 {
-	"name": "rewind-regex",
-	"authors": [
-		"Dmitry Olshansky"
-	],
-	"description": "REwind Regex. Radical and brutal twin of std.regex library",
-	"copyright": "Copyright © 2018, Dmitry Olshansky",
-	"license": "Boost"
+    "name": "rewind-regex",
+    "authors": [
+        "Dmitry Olshansky"
+    ],
+    "description": "REwind Regex. Radical and brutal twin of std.regex library",
+    "dependencies": {
+        "iopipe" : "0.0.4"
+    },
+    "copyright": "Copyright © 2018, Dmitry Olshansky",
+    "license": "Boost"
 }

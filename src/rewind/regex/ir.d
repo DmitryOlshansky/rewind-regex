@@ -10,6 +10,7 @@ module rewind.regex.ir;
 package:
 
 import std.exception, std.meta, std.range.primitives, std.traits, std.uni;
+import iopipe.traits;
 
 debug(std_regex_parser) import std.stdio;
 // just a common trait, may be moved elsewhere
@@ -417,26 +418,26 @@ struct Group(DataIndex)
 // and the exact type of engine created
 // there is a single instance per engine combination type x Char
 // In future may also maintain a (TLS?) cache of memory
-interface MatcherFactory(Char)
+interface MatcherFactory(Pipe)
 {
 @safe:
-    Matcher!Char create(const ref Regex!Char, in Char[] input) const;
-    Matcher!Char dup(Matcher!Char m, in Char[] input) const;
-    size_t incRef(Matcher!Char m) const;
-    size_t decRef(Matcher!Char m) const;
+    Matcher!Pipe create(const ref Regex!Char, ref Pipe input) const;
+    Matcher!Pipe dup(Matcher!Pipe m, ref Pipe input) const;
+    size_t incRef(Matcher!Pipe m) const;
+    size_t decRef(Matcher!Pipe m) const;
 }
 
 // Only memory management, no compile-time vs run-time specialities
-abstract class GenericFactory(alias EngineType, Char) : MatcherFactory!Char
+abstract class GenericFactory(alias EngineType, Pipe) : MatcherFactory!Char
 {
     import core.stdc.stdlib : malloc, free;
     import core.memory : GC;
     // round up to next multiple of size_t for alignment purposes
-    enum classSize = (__traits(classInstanceSize, EngineType!Char) + size_t.sizeof - 1) & ~(size_t.sizeof - 1);
+    enum classSize = (__traits(classInstanceSize, EngineType!Pipe) + size_t.sizeof - 1) & ~(size_t.sizeof - 1);
 
-    Matcher!Char construct(const ref Regex!Char re, in Char[] input, void[] memory) const;
+    Matcher!Pipe construct(const ref Regex!Char re, ref Pipe input, void[] memory) const;
 
-    override Matcher!Char create(const ref Regex!Char re, in Char[] input) const @trusted
+    override Matcher!Pipe create(const ref Regex!Char re, ref Pipe input) const @trusted
     {
         immutable size = EngineType!Char.initialMemory(re) + classSize;
         auto memory = enforce(malloc(size), "malloc failed")[0 .. size];
@@ -448,7 +449,7 @@ abstract class GenericFactory(alias EngineType, Char) : MatcherFactory!Char
         return engine;
     }
 
-    override Matcher!Char dup(Matcher!Char engine, in Char[] input) const @trusted
+    override Matcher!Pipe dup(Matcher!Pipe engine, in Char[] input) const @trusted
     {
         immutable size = EngineType!Char.initialMemory(engine.pattern) + classSize;
         auto memory = enforce(malloc(size), "malloc failed")[0 .. size];
@@ -460,12 +461,12 @@ abstract class GenericFactory(alias EngineType, Char) : MatcherFactory!Char
         return copy;
     }
 
-    override size_t incRef(Matcher!Char m) const
+    override size_t incRef(Matcher!Pipe m) const
     {
         return ++m.refCount;
     }
 
-    override size_t decRef(Matcher!Char m) const  @trusted
+    override size_t decRef(Matcher!Pipe m) const  @trusted
     {
         assert(m.refCount != 0);
         auto cnt = --m.refCount;
@@ -492,16 +493,17 @@ class RuntimeFactory(alias EngineType, Char) : GenericFactory!(EngineType, Char)
 
 // Defining it as an interface has the undesired side-effect:
 // casting any class to an interface silently adjusts pointer to point to a nested vtbl
-abstract class Matcher(Char)
+abstract class Matcher(Pipe)
 {
 abstract:
+    alias Char = ElementEncodingType!(WindowType!Pipe);
     // Get a (next) match
     int match(Group!size_t[] matches);
     // This only maintains internal ref-count,
     // deallocation happens inside MatcherFactory
     @property ref size_t refCount() @safe;
     // Copy internal state to another engine, using memory arena 'memory'
-    void dupTo(Matcher!Char m, void[] memory);
+    void dupTo(Matcher!Pipe m, void[] memory);
     // The pattern loaded
     @property ref const(Regex!Char) pattern() @safe;
 }
@@ -653,103 +655,6 @@ package:
 // but may need better place in the future (all internals)
 package:
 
-//Simple UTF-string abstraction compatible with stream interface
-struct Input(Char)
-if (is(Char :dchar))
-{
-    import std.utf : decode;
-    alias DataIndex = size_t;
-    enum bool isLoopback = false;
-    alias String = const(Char)[];
-    String _origin;
-    size_t _index;
-
-    //constructs Input object out of plain string
-    this(String input, size_t idx = 0)
-    {
-        _origin = input;
-        _index = idx;
-    }
-
-    //codepoint at current stream position
-    pragma(inline, true) bool nextChar(ref dchar res, ref size_t pos)
-    {
-        pos = _index;
-        // DMD's inliner hates multiple return functions
-        // but can live with single statement if/else bodies
-        bool n = !(_index == _origin.length);
-        if (n)
-            res = decode(_origin, _index);
-        return n;
-    }
-    @property bool atEnd(){
-        return _index == _origin.length;
-    }
-    bool search(Kickstart)(ref const Kickstart kick, ref dchar res, ref size_t pos)
-    {
-        size_t idx = kick.search(_origin, _index);
-        _index = idx;
-        return nextChar(res, pos);
-    }
-
-    //index of at End position
-    @property size_t lastIndex(){   return _origin.length; }
-
-    //support for backtracker engine, might not be present
-    void reset(size_t index){   _index = index;  }
-
-    String opSlice(size_t start, size_t end){   return _origin[start .. end]; }
-
-    auto loopBack(size_t index){   return BackLooper!Input(this, index); }
-}
-
-struct BackLooperImpl(Input)
-{
-    import std.utf : strideBack;
-    alias DataIndex = size_t;
-    alias String = Input.String;
-    enum bool isLoopback = true;
-    String _origin;
-    size_t _index;
-    this(Input input, size_t index)
-    {
-        _origin = input._origin;
-        _index = index;
-    }
-    @trusted bool nextChar(ref dchar res,ref size_t pos)
-    {
-        pos = _index;
-        if (_index == 0)
-            return false;
-
-        res = _origin[0.._index].back;
-        _index -= strideBack(_origin, _index);
-
-        return true;
-    }
-    @property atEnd(){ return _index == 0 || _index == strideBack(_origin, _index); }
-    auto loopBack(size_t index){   return Input(_origin, index); }
-
-    //support for backtracker engine, might not be present
-    //void reset(size_t index){   _index = index ? index-std.utf.strideBack(_origin, index) : 0;  }
-    void reset(size_t index){   _index = index;  }
-
-    String opSlice(size_t start, size_t end){   return _origin[end .. start]; }
-    //index of at End position
-    @property size_t lastIndex(){   return 0; }
-}
-
-template BackLooper(E)
-{
-    static if (is(E : BackLooperImpl!U, U))
-    {
-        alias BackLooper = U;
-    }
-    else
-    {
-        alias BackLooper = BackLooperImpl!E;
-    }
-}
 
 //both helpers below are internal, on its own are quite "explosive"
 //unsafe, no initialization of elements
