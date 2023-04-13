@@ -578,8 +578,8 @@ struct SimpleCaseEntry {
     // only runs semantic on the return type if the function gets
     // used. Also these are functions rather than templates to not
     // increase the object size of the caller.
-    auto simpleCaseTrie() { static immutable res = asTrie(simpleCaseTrieEntries); return res; }
-//    auto fullCaseTrie() { static immutable res = asTrie(fullCaseTrieEntries); return res; }
+    // auto simpleCaseTrie() { static immutable res = asTrie(simpleCaseTrieEntries); return res; }
+    // auto fullCaseTrie() { static immutable res = asTrie(fullCaseTrieEntries); return res; }
 
 }
 

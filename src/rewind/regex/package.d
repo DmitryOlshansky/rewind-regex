@@ -241,8 +241,7 @@ Macros:
 +/
 module rewind.regex;
 
-import std.range.primitives, std.traits;
-import std.typecons;
+import std.range.primitives;
 import rewind.regex.ir;
 
 /++
@@ -277,7 +276,6 @@ import rewind.regex.ir;
     assert(nc[1..$].equal(["var"]));
     ----
 +/
-public alias Regex(Char) = rewind.regex.ir.Regex!(Char);
 
 
 /++
@@ -294,16 +292,14 @@ public alias Regex(Char) = rewind.regex.ir.Regex!(Char);
 
     Throws: $(D RegexException) if there were any errors during compilation.
 +/
-@trusted public auto regex(S)(S[] patterns, const(char)[] flags="")
-if (isSomeString!(S))
+@trusted public auto regex(const(char)[][] patterns, const(char)[] flags="")
 {
     import std.array : appender;
-    import std.functional : memoize;
     enum cacheSize = 8; //TODO: invent nice interface to control regex caching
-    S pat;
+    const(char)[] pat;
     if (patterns.length > 1)
     {
-        auto app = appender!S();
+        auto app = appender!(const(char)[])();
         foreach (i, p; patterns)
         {
             if (i != 0)
@@ -325,14 +321,11 @@ if (isSomeString!(S))
     else
         pat = patterns[0];
 
-    if (__ctfe)
-        return regexImpl(pat, flags);
-    return memoize!(regexImpl!S, cacheSize)(pat, flags);
+    return Regex(pat, flags);
 }
 
 ///ditto
-@trusted public auto regex(S)(S pattern, const(char)[] flags="")
-if (isSomeString!(S))
+@trusted public auto regex(const(char)[] pattern, const(char)[] flags="")
 {
     return regex([pattern], flags);
 }
@@ -351,15 +344,6 @@ if (isSomeString!(S))
     assert(m.front[1] == "12");
 }
 
-public auto regexImpl(S)(S pattern, const(char)[] flags="")
-if (isSomeString!(S))
-{
-    import rewind.regex.parser : Parser, CodeGen;
-    auto parser = Parser!(Unqual!(typeof(pattern)), CodeGen)(pattern, flags);
-    auto r = parser.program;
-    return r;
-}
-
 enum isRegexFor(RegEx, R) = is(RegEx : const(Regex!(BasicElementOf!R)));
 
 /++
@@ -368,11 +352,9 @@ enum isRegexFor(RegEx, R) = is(RegEx : const(Regex!(BasicElementOf!R)));
 
     First element of range is the whole match.
 +/
-@trusted public struct Captures(R)
-if (isSomeString!R)
+@trusted public struct Captures
 {//@trusted because of union inside
     alias DataIndex = size_t;
-    alias String = R;
 private:
     import std.conv : text;
     enum smallString = 3;
@@ -397,7 +379,7 @@ private:
         _f = 0;
     }
 
-    this(ref RegexMatch!R rmatch)
+    this(ref RegexMatch rmatch)
     {
         _input = rmatch._input;
         _names = rmatch._engine.pattern.dict;
@@ -458,33 +440,33 @@ public:
         }
     }
     ///Slice of input prior to the match.
-    @property R pre()
+    @property const(char)[] pre()
     {
         return _nMatch == 0 ? _input[] : _input[0 .. matches[0].begin];
     }
 
     ///Slice of input immediately after the match.
-    @property R post()
+    @property const(char)[] post()
     {
         return _nMatch == 0 ? _input[] : _input[matches[0].end .. $];
     }
 
     ///Slice of matched portion of input.
-    @property R hit()
+    @property const(char)[] hit()
     {
         assert(_nMatch, "attempted to get hit of an empty match");
         return _input[matches[0].begin .. matches[0].end];
     }
 
     ///Range interface.
-    @property R front()
+    @property const(char)[] front()
     {
         assert(_nMatch, "attempted to get front of an empty match");
         return _input[matches[_f].begin .. matches[_f].end];
     }
 
     ///ditto
-    @property R back()
+    @property const(char)[] back()
     {
         assert(_nMatch, "attempted to get back of an empty match");
         return _input[matches[_b - 1].begin .. matches[_b - 1].end];
@@ -508,7 +490,7 @@ public:
     @property bool empty() const { return _nMatch == 0 || _f >= _b; }
 
     ///ditto
-    inout(R) opIndex()(size_t i) inout
+    inout(const(char)[]) opIndex()(size_t i) inout
     {
         assert(_f + i < _b,text("requested submatch number ", i," is out of range"));
         assert(matches[_f + i].begin <= matches[_f + i].end,
@@ -559,7 +541,7 @@ public:
         assert(c.front == "42");
         ----
     +/
-    R opIndex(String)(String i) /*const*/ //@@@BUG@@@
+    const(char)[] opIndex(String)(String i) /*const*/ //@@@BUG@@@
         if (isSomeString!String)
     {
         size_t index = lookupNamedGroup(_names, i);
@@ -606,22 +588,18 @@ public:
 /++
     A regex engine state, as returned by $(D match) family of functions.
 
-    Effectively it's a forward range of Captures!R, produced
+    Effectively it's a forward range of Captures, produced
     by lazily searching for matches in a given input.
 +/
-@trusted public struct RegexMatch(R)
-if (isSomeString!R)
+@trusted public struct RegexMatch
 {
 private:
-    alias Char = BasicElementOf!R;
-    Matcher!Char _engine;
-    Rebindable!(const MatcherFactory!Char) _factory;
-    R _input;
-    Captures!R _captures;
+    // TODO: Matcher!Char _engine;
+    const(char)[] _input;
+    Captures _captures;
 
-    this(RegEx)(R input, RegEx prog)
+    this(const(char)[] input, RegEx prog)
     {
-        import std.exception : enforce;
         _input = input;
         _factory = prog.factory;
         _engine = _factory.create(prog, input);
@@ -642,19 +620,19 @@ public:
     }
 
     ///Shorthands for front.pre, front.post, front.hit.
-    @property R pre()
+    @property const(char)[] pre()
     {
         return _captures.pre;
     }
 
     ///ditto
-    @property R post()
+    @property const(char)[] post()
     {
         return _captures.post;
     }
 
     ///ditto
-    @property R hit()
+    @property const(char)[] hit()
     {
         return _captures.hit;
     }
@@ -671,7 +649,7 @@ public:
         assert(m.empty);
         ---
     +/
-    @property inout(Captures!R) front() inout
+    @property inout(Captures) front() inout
     {
         return _captures;
     }
@@ -679,7 +657,6 @@ public:
     ///ditto
     void popFront()
     {
-        import std.exception : enforce;
         // CoW - if refCount is not 1, we are aliased by somebody else
         if (_engine.refCount != 1)
         {
@@ -706,20 +683,21 @@ public:
     T opCast(T:bool)(){ return !empty; }
 }
 
-private @trusted auto matchOnce(RegEx, R)(R input, const auto ref RegEx prog)
+private @trusted auto matchOnce(const(char)[] input, Regex prog)
 {
-    alias Char = BasicElementOf!R;
-    auto factory = prog.factory;
+    //TODO:
+    /*auto factory = prog.factory;
     auto engine = factory.create(prog, input);
     scope(exit) factory.decRef(engine); // destroys the engine
-    auto captures = Captures!R(input, prog.ngroup, prog.dict);
+    auto captures = Captures!const(char)[](input, prog.ngroup, prog.dict);
     captures._nMatch = engine.match(captures.matches);
     return captures;
+    */
 }
 
-private auto matchMany(RegEx, R)(R input, auto ref RegEx re) @safe
+private auto matchMany(const(char)[] input, Regex re) @safe
 {
-    return RegexMatch!R(input, re.withFlags(re.flags | RegexOption.global));
+    return RegexMatch(input, re.withFlags(re.flags | RegexOption.global));
 }
 
 /++
@@ -740,22 +718,19 @@ private auto matchMany(RegEx, R)(R input, auto ref RegEx re) @safe
     $(LREF Captures) containing the extent of a match together with all submatches
     if there was a match, otherwise an empty $(LREF Captures) object.
 +/
-public auto matchFirst(R, RegEx)(R input, RegEx re)
-if (isSomeString!R && isRegexFor!(RegEx, R))
+public auto matchFirst(const(char)[] input, Regex re)
 {
     return matchOnce(input, re);
 }
 
 ///ditto
-public auto matchFirst(R, String)(R input, String re)
-if (isSomeString!R && isSomeString!String)
+public auto matchFirst(const(char)[] input, const(char)[] re)
 {
     return matchOnce(input, regex(re));
 }
 
 ///ditto
-public auto matchFirst(R, String)(R input, String[] re...)
-if (isSomeString!R && isSomeString!String)
+public auto matchFirst(const(char)[] input, const(char)[][] re...)
 {
     return matchOnce(input, regex(re));
 }
@@ -781,22 +756,13 @@ if (isSomeString!R && isSomeString!String)
     $(LREF RegexMatch) object that represents matcher state
     after the first match was found or an empty one if not present.
 +/
-public auto matchAll(R, RegEx)(R input, RegEx re)
-if (isSomeString!R && isRegexFor!(RegEx, R))
+public auto matchAll(const(char)[] input, Regex re)
 {
     return matchMany(input, re);
 }
 
 ///ditto
-public auto matchAll(R, String)(R input, String re)
-if (isSomeString!R && isSomeString!String)
-{
-    return matchMany(input, regex(re));
-}
-
-///ditto
-public auto matchAll(R, String)(R input, String[] re...)
-if (isSomeString!R && isSomeString!String)
+public auto matchAll(const(char)[] input, const(char)[][] re...)
 {
     return matchMany(input, regex(re));
 }
@@ -833,7 +799,11 @@ if (isSomeString!R && isSomeString!String)
 
 
 ///Exception object thrown in case of errors during regex compilation.
-public alias RegexException = rewind.regex.ir.RegexException;
+public class RegexException : Exception {
+    this(string message) {
+        super(message);
+    }
+}
 
 /++
   A range that lazily produces a string output escaped

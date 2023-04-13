@@ -105,7 +105,7 @@ auto simpleCaseFoldings(dchar ch) @safe
             }
         }
     }
-    immutable idx = simpleCaseTrie[ch];
+    immutable idx = ch; // TODO: simpleCaseTrie[ch];
     if (idx == EMPTY_CASE_TRIE)
         return Range(ch);
     auto entry = sTable[idx];
