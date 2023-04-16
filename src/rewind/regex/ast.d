@@ -14,7 +14,7 @@ class Pattern : Ast {
         this.children = children;
     }
 
-    string toDot() {
+    override string toDot() {
         auto result = "digraph Pattern {\n";
         result ~= format("f%s", counter);
         foreach(ast; children) {

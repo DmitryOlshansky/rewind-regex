@@ -364,13 +364,18 @@ private:
         Group!DataIndex[] big_matches;
         Group!DataIndex[smallString] small_matches;
     }
+    struct NamedGroup
+    {
+        Group!DataIndex group;
+        string name;
+    }
     const(NamedGroup)[] _names;
-    R _input;
+    const(char)[] _input;
     int _nMatch;
     uint _f, _b;
     uint _refcount; // ref count or SMALL MASK + num groups
 
-    this(R input, uint n, const(NamedGroup)[] named)
+    this(const(char)[] input, uint n, const(NamedGroup)[] named)
     {
         _input = input;
         _names = named;
@@ -598,7 +603,7 @@ private:
     const(char)[] _input;
     Captures _captures;
 
-    this(const(char)[] input, RegEx prog)
+    this(const(char)[] input, Regex prog)
     {
         _input = input;
         _factory = prog.factory;
