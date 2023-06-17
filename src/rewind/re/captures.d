@@ -1,5 +1,8 @@
 module rewind.re.captures;
 
+import rewind.re.ir, rewind.re.matcher;
+
+
 /++
     $(D Captures) object contains submatches captured during a call
     to $(D match) or iteration over $(D RegexMatch) range.
@@ -247,3 +250,90 @@ public:
     assert(!matchFirst("nothing", "something"));
 }
 
+/++
+    A regex engine state, as returned by $(D match) family of functions.
+
+    Effectively it's a forward range of Captures, produced
+    by lazily searching for matches in a given input.
++/
+@trusted public struct RegexMatch
+{
+private:
+    // TODO: Matcher!Char _engine;
+    const(char)[] _input;
+    Captures _captures;
+    Matcher _engine;
+
+    this(const(char)[] input, Re prog)
+    {
+        _input = input;
+        _engine = prog.engine();
+        _captures = Captures!R(this);
+        _captures._nMatch = _engine.match(_captures.matches);
+    }
+
+public:
+
+    ///Shorthands for front.pre, front.post, front.hit.
+    @property const(char)[] pre()
+    {
+        return _captures.pre;
+    }
+
+    ///ditto
+    @property const(char)[] post()
+    {
+        return _captures.post;
+    }
+
+    ///ditto
+    @property const(char)[] hit()
+    {
+        return _captures.hit;
+    }
+
+    /++
+        Functionality for processing subsequent matches of global regexes via range interface:
+        ---
+        import rewind.regex;
+        auto m = matchAll("Hello, world!", regex(`\w+`));
+        assert(m.front.hit == "Hello");
+        m.popFront();
+        assert(m.front.hit == "world");
+        m.popFront();
+        assert(m.empty);
+        ---
+    +/
+    @property inout(Captures) front() inout
+    {
+        return _captures;
+    }
+
+    ///ditto
+    void popFront()
+    {
+        // CoW - if refCount is not 1, we are aliased by somebody else
+        if (_engine.refCount != 1)
+        {
+            // we create a new engine & abandon this reference
+            auto old = _engine;
+            _engine = _factory.dup(old, _input);
+            _factory.decRef(old);
+        }
+        if (!_captures.unique)
+        {
+            // has external references - allocate new space
+            _captures.newMatches(_engine.pattern.ngroup);
+        }
+        _captures._nMatch = _engine.match(_captures.matches);
+    }
+
+    ///ditto
+    auto save(){ return this; }
+
+    ///Test if this match object is empty.
+    @property bool empty() const { return _captures._nMatch == 0; }
+
+    ///Same as !(x.empty), provided for its convenience  in conditional statements.
+    T opCast(T:bool)(){ return !empty; }
+}
