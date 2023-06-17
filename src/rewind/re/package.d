@@ -358,7 +358,7 @@ private:
     enum SMALL_MASK = 0x8000_0000, REF_MASK= 0x1FFF_FFFF;
 
     struct Group {
-        int from, to;
+        size_t begin, end;
     }
 
     union
@@ -407,8 +407,8 @@ private:
         import std.exception : enforce;
         if (n > smallString)
         {
-            auto p = cast(Group!DataIndex*) enforce(
-                calloc(Group!DataIndex.sizeof,n),
+            auto p = cast(Group*) enforce(
+                calloc(Group.sizeof,n),
                 "Failed to allocate Captures struct"
             );
             big_matches = p[0 .. n];
