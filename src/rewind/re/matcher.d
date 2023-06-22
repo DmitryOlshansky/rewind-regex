@@ -27,6 +27,7 @@ final class Empty : Matcher {
 }
 
 final class Char : Matcher {
+    import core.stdc.string;
     private char ch;
     private bool exact;
     this(char ch, bool exact) {
@@ -38,8 +39,16 @@ final class Char : Matcher {
         return slice.length > 0 ? slice[0] == ch : false;
     }
     bool realHasMatch(const(char)[] slice) {
-        import core.stdc.string;
         return memchr(slice.ptr, slice.length, ch) != null;
     }
-
+    const(char)[] realLocate(const(char)[] slice) {
+        auto p = memchr(slice.ptr, slice.length, ch);
+        return p == null ? null : slice[p - slice.ptr .. $];
+    }
+    Captures realFullyMatch(const(char)[] slice) {
+        auto p = memchr(slice.ptr, slice.length, ch);
+        const(char)[][] captures = [];
+        captures ~= p == null ? null : slice[p - slice.ptr .. $];
+        return Captures(captures);
+    }
 }
