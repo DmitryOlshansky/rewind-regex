@@ -25,18 +25,13 @@ private:
         Group[] big_matches;
         Group[smallString] small_matches;
     }
-    struct NamedGroup
-    {
-        Group group;
-        string name;
-    }
-    const(NamedGroup)[] _names;
+    int[string] _names;
     const(char)[] _input;
     int _nMatch;
     uint _f, _b;
     uint _refcount; // ref count or SMALL MASK + num groups
 
-    this(const(char)[] input, uint n, const(NamedGroup)[] named)
+    this(const(char)[] input, uint n, int[string] named)
     {
         _input = input;
         _names = named;
@@ -48,10 +43,10 @@ private:
     this(ref RegexMatch rmatch)
     {
         _input = rmatch._input;
-        _names = rmatch._engine.pattern.dict;
-        immutable n = rmatch._engine.pattern.ngroup;
+        _names = rmatch._re.dict;
+        immutable n = rmatch._re.dict.length;
         newMatches(n);
-        _b = n;
+        _b = cast(uint)n;
         _f = 0;
     }
 
@@ -60,7 +55,7 @@ private:
        return (_refcount & SMALL_MASK)  ? small_matches[0 .. _refcount & 0xFF] : big_matches;
     }
 
-    void newMatches(uint n)
+    void newMatches(size_t n)
     {
         import core.stdc.stdlib : calloc;
         import std.exception : enforce;
@@ -75,7 +70,7 @@ private:
         }
         else
         {
-            _refcount = SMALL_MASK | n;
+            _refcount = SMALL_MASK | cast(uint)n;
         }
     }
 
@@ -209,7 +204,7 @@ public:
     +/
     const(char)[] opIndex(const(char)[] i) /*const*/ //@@@BUG@@@
     {
-        size_t index = lookupNamedGroup(_names, i);
+        size_t index = _names[i];
         return _input[matches[index].begin .. matches[index].end];
     }
 
@@ -262,14 +257,14 @@ private:
     // TODO: Matcher!Char _engine;
     const(char)[] _input;
     Captures _captures;
-    Matcher _engine;
+    Re _re;
 
     this(const(char)[] input, Re prog)
     {
         _input = input;
-        _engine = prog.engine();
-        _captures = Captures!R(this);
-        _captures._nMatch = _engine.match(_captures.matches);
+        _re = prog;
+        _captures = Captures(this);
+        _captures._nMatch = _re.engine().match(_captures.matches);
     }
 
 public:
@@ -312,20 +307,8 @@ public:
     ///ditto
     void popFront()
     {
-        // CoW - if refCount is not 1, we are aliased by somebody else
-        if (_engine.refCount != 1)
-        {
-            // we create a new engine & abandon this reference
-            auto old = _engine;
-            _engine = _factory.dup(old, _input);
-            _factory.decRef(old);
-        }
-        if (!_captures.unique)
-        {
-            // has external references - allocate new space
-            _captures.newMatches(_engine.pattern.ngroup);
-        }
-        _captures._nMatch = _engine.match(_captures.matches);
+        _captures.newMatches(_re.dict.length);
+        _captures._nMatch = _re.engine().match(_captures.matches);
     }
 
     ///ditto

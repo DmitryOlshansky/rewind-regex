@@ -1,6 +1,6 @@
 module rewind.re.ast;
 
-import std.format, std.conv, std.uni, std.algorithm;
+import std.array, std.format, std.conv, std.uni, std.algorithm;
 
 abstract class Ast {
     static int counter = 0;
@@ -40,7 +40,7 @@ class Seq : Ast {
     override string toDot() {
         auto self = counter;
         auto result = format("f%d [label=\"%s\"]\n", counter++, repr());
-        foreach (ast; alts) {
+        foreach (ast; seq) {
             auto cnt = counter;
             result ~= ast.toDot();
             result ~= format("f%d -> f%d\n", self, cnt);

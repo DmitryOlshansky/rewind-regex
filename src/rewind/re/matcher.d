@@ -11,7 +11,12 @@ interface Matcher {
     Matcher next(); // next matcher in the chain
 }
 
+RegexMatch match(const(char)[] slice, Group[] groups) {
+    
+}
+
 final class Empty : Matcher {
+    private Matcher next_;
     bool exact() { return true; }
     bool realMatches(const(char)[] slice) { return true; }
     bool realHasMatch(const(char)[] slice) { return true; }
@@ -24,17 +29,20 @@ final class Empty : Matcher {
         }
         return Captures();
     }
+    Matcher next(){ return next_; }
 }
 
 final class Char : Matcher {
     import core.stdc.string;
     private char ch;
-    private bool exact;
+    private bool exact_;
+    private Matcher next_;
+
     this(char ch, bool exact) {
         this.ch = ch;
-        this.exact = exact;
+        this.exact_ = exact;
     }
-    bool exact(){ return exact; }
+    bool exact(){ return exact_; }
     bool realMatches(const(char)[] slice) {
         return slice.length > 0 ? slice[0] == ch : false;
     }
@@ -45,10 +53,11 @@ final class Char : Matcher {
         auto p = memchr(slice.ptr, slice.length, ch);
         return p == null ? null : slice[p - slice.ptr .. $];
     }
-    Captures realFullyMatch(const(char)[] slice) {
+    Captures realFullyMatch(ref const(char)[] slice) {
         auto p = memchr(slice.ptr, slice.length, ch);
         const(char)[][] captures = [];
         captures ~= p == null ? null : slice[p - slice.ptr .. $];
         return Captures(captures);
     }
+    Matcher next(){ return next_; }
 }

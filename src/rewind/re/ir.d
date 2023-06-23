@@ -38,6 +38,7 @@ import rewind.re.matcher;
 struct Re {
     string pattern;
     string flags;
+    int[string] dict;
     ubyte[] code;
 
     Matcher engine();
@@ -61,7 +62,7 @@ void put32(ref ubyte[] dest, uint arg) {
     dest ~= (arg >> 24) & 0xFF;
 }
 
-void encode(Opcode op, T... args)(ref ubyte[] dest, T args) {
+void encode(Opcode op, T...)(ref ubyte[] dest, T args) {
     static if (op == Opcode.ANY) {
         dest ~= op;
     } else static if (op == Opcode.CHAR) {
