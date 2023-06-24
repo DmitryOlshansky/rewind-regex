@@ -275,25 +275,25 @@ import rewind.re.ast, rewind.re.ir, rewind.re.captures;
             // terminator for the pattern
             // to detect if the pattern unexpectedly ends
             app.put("\\");
-            app.put(cast(dchar)(privateUseStart+i));
+            app.put(cast(dchar)('\U000F0000'+i));
             app.put(")");
             // another one to return correct whichPattern
             // for all of potential alternatives in the patterns[i]
             app.put("\\");
-            app.put(cast(dchar)(privateUseStart+i));
+            app.put(cast(dchar)('\U000F0000'+i));
         }
         pat = app.data;
     }
     else
         pat = patterns[0];
 
-    return Re(pat, flags);
+    return Re(pat.idup, flags.idup, 0, null, null);
 }
 
 ///ditto
 @trusted public auto re(const(char)[] pattern, const(char)[] flags="")
 {
-    return re([pattern], flags);
+    return re([pattern], flags.idup);
 }
 
 ///
@@ -324,7 +324,7 @@ private @trusted auto matchOnce(const(char)[] input, Re prog)
 
 private auto matchMany(const(char)[] input, Re re) @safe
 {
-    return RegexMatch(input, re.withFlags(re.flags | RegexOption.global));
+    return RegexMatch(input, re.withFlags(re.flags ~ "g"));
 }
 
 /++
@@ -351,15 +351,15 @@ public auto matchFirst(const(char)[] input, Re re)
 }
 
 ///ditto
-public auto matchFirst(const(char)[] input, const(char)[] re)
+public auto matchFirst(const(char)[] input, const(char)[] pattern)
 {
-    return matchOnce(input, regex(re));
+    return matchOnce(input, re(pattern));
 }
 
 ///ditto
-public auto matchFirst(const(char)[] input, const(char)[][] re...)
+public auto matchFirst(const(char)[] input, const(char)[][] patterns...)
 {
-    return matchOnce(input, regex(re));
+    return matchOnce(input, re(patterns));
 }
 
 /++
@@ -389,9 +389,9 @@ public auto matchAll(const(char)[] input, Re re)
 }
 
 ///ditto
-public auto matchAll(const(char)[] input, const(char)[][] re...)
+public auto matchAll(const(char)[] input, const(char)[][] patterns...)
 {
-    return matchMany(input, regex(re));
+    return matchMany(input, re(patterns));
 }
 
 // another set of tests just to cover the new API

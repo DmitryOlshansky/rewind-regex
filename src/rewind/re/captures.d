@@ -24,14 +24,13 @@ private:
     Captures _captures;
     Re _re;
 
+public:
     this(const(char)[] input, Re prog)
     {
         _input = input;
         _re = prog;
         _captures = _re.engine().match(input);
     }
-
-public:
 
     ///Shorthands for front.pre, front.post, front.hit.
     @property const(char)[] pre()

@@ -42,7 +42,21 @@ struct Re {
     int[string] dict;
     ubyte[] code;
 
+    this(string pattern, string flags, int ngroup, int[string] dict, ubyte[] code) {
+        this.pattern = pattern;
+        this.flags = flags;
+        this.ngroup = ngroup;
+        this.dict = dict;
+        this.code = code;
+    }
+
     Matcher engine();
+
+    auto withFlags(string extra) {
+        auto copy = this;
+        copy.flags ~= extra;
+        return copy;
+    }
 }
 
 enum Opcode : ubyte {
