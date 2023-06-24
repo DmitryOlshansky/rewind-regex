@@ -11,8 +11,8 @@ interface Matcher {
     Matcher next(); // next matcher in the chain
 }
 
-RegexMatch match(const(char)[] slice, Group[] groups) {
-    
+Captures match(Matcher matcher, ref const(char)[] slice) {
+    return matcher.realFullyMatch(slice);
 }
 
 final class Empty : Matcher {
@@ -25,9 +25,9 @@ final class Empty : Matcher {
         if (slice.length > 0) {
             const cap = slice[0..1];
             slice = slice[1..$];
-            return Captures(cap);
+            return [cap];
         }
-        return Captures();
+        return null;
     }
     Matcher next(){ return next_; }
 }
@@ -47,17 +47,17 @@ final class Char : Matcher {
         return slice.length > 0 ? slice[0] == ch : false;
     }
     bool realHasMatch(const(char)[] slice) {
-        return memchr(slice.ptr, slice.length, ch) != null;
+        return memchr(slice.ptr, ch, slice.length) != null;
     }
     const(char)[] realLocate(const(char)[] slice) {
-        auto p = memchr(slice.ptr, slice.length, ch);
+        auto p = cast(char*)memchr(slice.ptr, ch, slice.length);
         return p == null ? null : slice[p - slice.ptr .. $];
     }
     Captures realFullyMatch(ref const(char)[] slice) {
-        auto p = memchr(slice.ptr, slice.length, ch);
+        auto p = cast(char*)memchr(slice.ptr, ch, slice.length);
         const(char)[][] captures = [];
         captures ~= p == null ? null : slice[p - slice.ptr .. $];
-        return Captures(captures);
+        return captures;
     }
     Matcher next(){ return next_; }
 }

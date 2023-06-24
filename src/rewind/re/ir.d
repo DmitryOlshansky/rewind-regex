@@ -38,6 +38,7 @@ import rewind.re.matcher;
 struct Re {
     string pattern;
     string flags;
+    int ngroup;
     int[string] dict;
     ubyte[] code;
 
