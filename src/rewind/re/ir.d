@@ -342,3 +342,46 @@ unittest {
     assert(code.backtracking(str));
     assert(str == null);
 }
+
+bool thompson(ubyte[] code, ref const(char)[] slice) {
+    static import std.utf;
+    struct State {
+        size_t pc, idx;
+        State* next;
+    }
+    State* cur = new State(0,0,null);
+    State* freelist = null;
+    for (;;) {
+        if (cur.pc == code.length) return true;
+        while (cur != null) {
+            auto op = code[cur.pc];
+            switch (op) with (Opcode) {
+                case ANY:
+                    cur.pc++;
+                    std.utf.decode(slice, cur.idx);
+                    break;
+                case CHAR:
+                    auto ch = std.utf.decode(slice, cur.idx);
+                    if (ch != get32(code, cur.pc + 1)) {
+                        auto tail = freelist;
+                        cur.next = tail;
+                        freelist = cur;
+                        cur = cur.next;
+                        if (cur == null) return false;
+                        break;
+                    }
+                    cur.pc++;
+                    cur = cur.next;
+                    break;
+                case FORK:
+                    auto left = get32(code, cur.pc + 1);
+                    auto right = get32(code, cur.pc + 5);
+                    cur.next = new State(right, cur.idx, null);
+                    cur.pc = left;
+                    break;
+                default:
+                    assert(false, "TODO!");
+            }
+        }
+    }
+}

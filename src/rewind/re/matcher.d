@@ -124,6 +124,46 @@ final class Backtracking : Matcher {
     override Matcher next() => _next;
 }
 
+class Thompson : Matcher {
+    import rewind.re.ir;
+    private ubyte[] code;
+    private Matcher _next;
+
+    this(ubyte[] code, Matcher next) {
+        this.code = code;
+        this._next = next;
+    }
+    override bool exact() => true;
+    override bool realMatches(const(char)[] slice) {
+        return code.thompson(slice);
+    }
+    override bool realHasMatch(const(char)[] slice) {
+        foreach (size_t i, dchar ch; slice) {
+            auto p = slice[i..$];
+            if (code.thompson(p)) return true;
+        }
+        return false;
+    }
+    override const(char)[] realLocate(const(char)[] slice) {
+        foreach (size_t i, dchar ch; slice) {
+            auto p = slice[i..$];
+            if (code.thompson(p)) return p;
+        }
+        return null;
+    }
+    override Captures realFullyMatch(ref const(char)[] slice) {
+        foreach (size_t i, dchar ch; slice) {
+            auto p = slice[i..$];
+            if (code.thompson(p)) {
+                slice = p;
+                return [p];
+            }
+        }
+        return null;
+    }
+    override Matcher next() => _next;
+}
+
 unittest {
     import rewind.re.ir;
     ubyte[] code;
@@ -139,4 +179,20 @@ unittest {
     const(char)[] test2 = "az";
     auto s = m.match(test2);
     // assert(s == ["az"]);
+}
+
+unittest {
+    import rewind.re.ir;
+    ubyte[] code;
+    with (Opcode) {
+        encode!CHAR(code, 'a');
+        encode!CHAR(code, 'z');
+    }
+    auto m = new Thompson(code, null);
+    assert(m.matches("az"));
+    assert(m.hasMatch("aaaza"));
+    const(char)[] test = "AAAzzzaza";
+    assert(m.locate(test));
+    const(char)[] test2 = "az";
+    auto s = m.match(test2);
 }
