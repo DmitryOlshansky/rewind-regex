@@ -220,6 +220,10 @@ bool backtracking(ubyte[] code, ref const(char)[] slice) {
     int idx;
     State[] stack;
     void backtrack() {
+        if (stack.length == 0) {
+            pc = cast(int)code.length;
+            return;
+        }
         auto p = stack[$-1];
         pc = p.pc;
         idx = p.idx;
@@ -295,6 +299,7 @@ bool backtracking(ubyte[] code, ref const(char)[] slice) {
                 assert(false, "Unsupported for now");
         }
     }
+    slice = slice[idx..$];
     return true;
 }
 
@@ -335,4 +340,5 @@ unittest {
         encode!CHAR(code, 'c');
     }
     assert(code.backtracking(str));
+    assert(str == null);
 }

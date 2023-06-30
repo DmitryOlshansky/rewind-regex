@@ -15,6 +15,23 @@ Captures match(Matcher matcher, ref const(char)[] slice) {
     return matcher.realFullyMatch(slice);
 }
 
+bool matches(Matcher matcher, const(char)[] slice) {
+    return matcher.realMatches(slice);
+}
+
+bool hasMatch(Matcher matcher, const(char)[] slice) {
+    return matcher.realHasMatch(slice);
+}
+
+bool locate(Matcher matcher, ref const(char)[] slice) {
+    auto p = matcher.realLocate(slice);
+    if (p == null) return false;
+    else {
+        slice = p;
+        return true;
+    }
+}
+
 final class Empty : Matcher {
     private Matcher next_;
     bool exact() { return true; }
@@ -60,4 +77,66 @@ final class Char : Matcher {
         return captures;
     }
     Matcher next(){ return next_; }
+}
+
+final class Backtracking : Matcher {
+    import rewind.re.ir;
+    private ubyte[] code;
+    private Matcher _next;
+
+    this(ubyte[] code, Matcher next) {
+        this.code = code;
+        this._next = next;
+    }
+    override bool exact() => true;
+    override bool realMatches(const(char)[] slice) {
+        return code.backtracking(slice);
+    }
+    override bool realHasMatch(const(char)[] slice) {
+        foreach (idx, ch; slice) {
+            auto p = slice[idx..$];
+            if (code.backtracking(p)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    override const(char)[] realLocate(const(char)[] slice) {
+        foreach (idx, ch; slice) {
+            auto p = slice[idx..$];
+            if (code.backtracking(p)) {
+                slice = p;
+                return p;
+            }
+        }
+        return null;
+    }
+    override Captures realFullyMatch(ref const(char)[] slice) {
+        foreach (idx, ch; slice) {
+            auto p = slice[idx..$];
+            if (code.backtracking(p)) {
+                slice = p;
+                return [p];
+            }
+        }
+        return null;
+    }
+    override Matcher next() => _next;
+}
+
+unittest {
+    import rewind.re.ir;
+    ubyte[] code;
+    with (Opcode) {
+        encode!CHAR(code, 'a');
+        encode!CHAR(code, 'z');
+    }
+    auto m = new Backtracking(code, null);
+    assert(m.matches("az"));
+    assert(m.hasMatch("aaaza"));
+    const(char)[] test = "AAAzzzaza";
+    assert(m.locate(test));
+    const(char)[] test2 = "az";
+    auto s = m.match(test2);
+    // assert(s == ["az"]);
 }
