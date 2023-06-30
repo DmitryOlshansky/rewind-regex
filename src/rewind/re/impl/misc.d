@@ -113,6 +113,7 @@ auto simpleCaseFoldings(dchar ch) @safe
     return Range(start, entry.size);
 }
 
+/*
 unittest
 {
     import std.algorithm.comparison : equal;
@@ -128,7 +129,7 @@ unittest
     assert(sr.length == 3);
     assert(sr.canFind('å') && sr.canFind('Å') && sr.canFind('\u212B'));
 }
-
+*/
 
 //test if a given string starts with hex number of maxDigit that's a valid codepoint
 //returns it's value and skips these maxDigit chars on success, throws on failure

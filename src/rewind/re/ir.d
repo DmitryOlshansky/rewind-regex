@@ -1,5 +1,6 @@
 module rewind.re.ir;
 
+import std.uni;
 import rewind.re.matcher;
 
 
@@ -41,16 +42,18 @@ struct Re {
     int ngroup;
     int[string] dict;
     ubyte[] code;
+    Matcher matcher;
 
-    this(string pattern, string flags, int ngroup, int[string] dict, ubyte[] code) {
+    this(string pattern, string flags, int ngroup, int[string] dict, ubyte[] code, Matcher matcher) {
         this.pattern = pattern;
         this.flags = flags;
         this.ngroup = ngroup;
         this.dict = dict;
         this.code = code;
+        this.matcher = matcher;
     }
 
-    Matcher engine();
+    Matcher engine() => matcher;
 
     auto withFlags(string extra) {
         auto copy = this;
@@ -77,13 +80,259 @@ void put32(ref ubyte[] dest, uint arg) {
     dest ~= (arg >> 24) & 0xFF;
 }
 
+int get32(ubyte[] code, size_t idx) {
+    uint ret = (code[idx] & 0xFF);
+    ret |= (code[idx+1] & 0xFF) << 8;
+    ret |= (code[idx+2] & 0xFF) << 16;
+    ret |= (code[idx+3] & 0xFF) << 24;
+    return ret;
+}
+
 void encode(Opcode op, T...)(ref ubyte[] dest, T args) {
-    static if (op == Opcode.ANY) {
-        dest ~= op;
-    } else static if (op == Opcode.CHAR) {
-        dest ~= op;
-        put32(dest, args[0]);
-    } else {
-        static assert(false, "TODO");
+    import std.range;
+    dest ~= op;
+    ubyte[] putTable(CodepointSet set) {
+        ubyte[] table;
+        foreach (ch; set.byCodepoint) {
+            if (table.length*8 <= ch) {
+                table.length = ch / 8 + 1; 
+            }
+            table[ch/8] |= 1<<(ch % 8);
+        }
+        return table;
     }
+    static if (op == Opcode.ANY) {
+        //nop
+    } else static if (op == Opcode.CHAR) {
+        put32(dest, args[0]);
+    } else static if (op == Opcode.NOTCHAR) {
+        put32(dest, args[0]);
+    } else static if (op == Opcode.CHARCLASS) {
+        put32(dest, args[0].byCodepoint.front);
+        dchar last;
+        foreach (c; args[0].byCodepoint) {
+            last = c;
+        }
+        put32(dest, last);
+        dest ~= putTable(args[0]);
+    } else static if (op == Opcode.NOTCHARCLASS) {
+        auto inv = args[0].invert;
+        put32(dest, inv.byCodepoint.front);
+        dchar last;
+        foreach (c; inv.byCodepoint) {
+            last = c;
+        }
+        put32(dest, last);
+        dest ~= putTable(inv);
+    } else static if (op == Opcode.JMP) {
+        put32(dest, args[0]);
+    } else static if (op == Opcode.FORK) {
+        put32(dest, args[0]);
+        put32(dest, args[1]);
+    } else static if (op == Opcode.COUNTED_LOOP) {
+        put32(dest, args[0]);
+        put32(dest, args[1]);
+        put32(dest, args[2]);
+    } else {
+        static assert(false, "Unexpected opcode " ~ op.to!string);
+    }
+}
+
+string decode(ubyte[] code) {
+    import std.format, std.conv;
+    size_t index = 0;
+    string listing; 
+    while (index < code.length) {
+        ubyte op = code[index];
+        switch (op) with(Opcode) {
+            case ANY:
+                listing ~= "%d\t%s\n".format(index, "ANY");
+                index++;
+                break;
+            case CHAR:
+                auto ch = get32(code, index);
+                listing ~= "%d\t%s(%c)\n".format(index, "CHAR", cast(dchar)ch);
+                index += 5;
+                break;
+            case NOTCHAR:
+                auto ch = get32(code, index);
+                listing ~= "%d\t%s(%c)\n".format(index, "NOTCHAR", cast(dchar)ch);
+                index += 5;
+                break;
+            case CHARCLASS:
+                auto first = get32(code, index + 1);
+                auto last = get32(code, index + 5);
+                auto len = last - first;
+                auto table = code[5 .. len + 5]; 
+                listing ~= "%d\t%s(%c, %c)\t%s\n".format(
+                    index, 
+                    "CHARCLASS",
+                    cast(dchar)first,
+                    cast(dchar)last,
+                    table
+                );
+                index += 5 + len;
+                break;
+            case NOTCHARCLASS:
+                auto first = get32(code, index + 1);
+                auto last = get32(code, index + 5);
+                auto len = last - first;
+                auto table = code[9 .. len + 9]; 
+                listing ~= "%d\t%s(%c, %c)\t%s\n".format(
+                    index, 
+                    "NOTCHARCLASS",
+                    cast(dchar)first,
+                    cast(dchar)last,
+                    table
+                );
+                index += 9 + len;
+                break;
+            case JMP:
+                auto offset = get32(code, index + 1);
+                listing ~= "%d\t%s => %s".format(index, "JMP", offset);
+                index += 5;
+                break;
+            case FORK:
+                auto left = get32(code, index + 1);
+                auto right = get32(code, index + 5);
+                listing ~= "%d\t%s => %s => %s".format(index, "FORK", left, right);
+                index += 9;
+                break;
+            case COUNTED_LOOP:
+                auto min = get32(code, index + 1);
+                auto max = get32(code, index + 5);
+                auto target = get32(code, index + 9);
+                listing ~= "%d\t%s (%s,%s) => %s".format(index, "COUNTED_LOOP", min, max, target);
+                index += 13;
+                break;
+            default:
+                assert(false, "Reached unknown opcode "~op.to!string);
+        }
+    }
+    return listing;
+}
+
+bool backtracking(ubyte[] code, ref const(char)[] slice) {
+    struct State {
+        int pc, idx;
+    }
+    int pc = 0;
+    int idx;
+    State[] stack;
+    void backtrack() {
+        auto p = stack[$-1];
+        pc = p.pc;
+        idx = p.idx;
+        stack = stack[0 .. $-1];
+        stack.assumeSafeAppend();
+    }
+
+    while (pc < code.length) {
+        auto op = code[pc];
+        switch (op) with (Opcode) {
+            case ANY:
+                if (idx < slice.length) {
+                    idx++;
+                    pc++;
+                } else {
+                    backtrack();
+                } 
+                break;
+            case CHAR:
+                auto ch = get32(code, pc + 1);
+                if (slice[idx] == ch) {
+                    pc += 5;
+                    idx++;
+                } else {
+                    backtrack();
+                }
+                break;
+            case NOTCHAR:
+                auto ch = get32(code, pc + 1);
+                if (slice[idx] != ch) {
+                    pc += 5;
+                    idx++;
+                } else {
+                    backtrack();
+                }
+                break;
+            case CHARCLASS:
+                auto min = get32(code, pc + 1);
+                auto max = get32(code, pc + 5);
+                auto len = max - min;
+                auto table = code[pc + 9 .. pc + len + 9];
+                if (table[slice[idx]/8] & (1<<(slice[idx]%8))) {
+                    pc += 9 + len;
+                    idx++;
+                } else {
+                    backtrack();
+                }
+                break;
+            case NOTCHARCLASS:
+                auto min = get32(code, pc + 1);
+                auto max = get32(code, pc + 5);
+                auto len = max - min;
+                auto table = code[pc + 9 .. pc + len + 9];
+                if (!(table[slice[idx]/8] & (1<<(slice[idx]%8)))) {
+                    pc += 9 + len;
+                    idx++;
+                } else {
+                    backtrack();
+                }
+                break;
+            case JMP:
+                pc += get32(code, pc + 1);
+                break;
+            case FORK:
+                auto left = get32(code, pc + 1);
+                auto right = get32(code, pc + 5);
+                stack ~= State(right, idx);
+                pc = left;
+                break;
+            case COUNTED_LOOP:
+                assert(false, "TODO!");
+            default:
+                assert(false, "Unsupported for now");
+        }
+    }
+    return true;
+}
+
+unittest {
+    import std.stdio;
+    ubyte[] code;
+    with (Opcode) {
+        encode!ANY(code);
+        encode!(CHAR)(code, 'a');
+        encode!(NOTCHAR)(code, 'b');
+        encode!(CHARCLASS)(code, CodepointSet('a', 'z'+1));
+        encode!(JMP)(code, 1);
+        encode!(CHAR)(code, 'z');
+        encode!(COUNTED_LOOP)(code, 1, 2, 41);
+        encode!(FORK)(code, 41, 0);
+        writeln(decode(code));
+    }
+}
+
+unittest {
+    ubyte[] code;
+    const(char)[] str = "abc";
+    with (Opcode) {
+        encode!CHAR(code, 'a');
+        encode!CHAR(code, 'b');
+        encode!ANY(code);
+    }
+    assert(code.backtracking(str));
+}
+
+unittest {
+    ubyte[] code;
+    const(char)[] str = "aaaabc";
+    with (Opcode) {
+        encode!CHAR(code, 'a');
+        encode!FORK(code, 0, 14);
+        encode!CHAR(code, 'b');
+        encode!CHAR(code, 'c');
+    }
+    assert(code.backtracking(str));
 }

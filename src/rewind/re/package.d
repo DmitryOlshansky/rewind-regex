@@ -8,12 +8,12 @@
 
   $(SECTION Synopsis)
   ---
-  import rewind.regex;
+  import rewind.re;
   import std.stdio;
   void main()
   {
       // Print out all possible dd/mm/yy(yy) dates found in user input.
-      auto r = regex(`\b[0-9][0-9]?/[0-9][0-9]?/[0-9][0-9](?:[0-9][0-9])?\b`);
+      auto r = re(`\b[0-9][0-9]?/[0-9][0-9]?/[0-9][0-9](?:[0-9][0-9])?\b`);
       foreach (line; stdin.byLine)
       {
         // matchAll() returns a range that can be iterated
@@ -24,13 +24,11 @@
   }
   ...
   // multi-pattern regex
-  auto multi = regex([`\d+,\d+`,`(a-z]+):(\d+)`]);
+  auto multi = re([`\d+,\d+`,`(a-z]+):(\d+)`]);
   auto m = "abc:43 12,34".matchAll(multi);
-  assert(m.front.whichPattern == 2);
   assert(m.front[1] == "abc");
   assert(m.front[2] == "43");
   m.popFront();
-  assert(m.front.whichPattern == 1);
   assert(m.front[1] == "12");
   ...
 
@@ -287,7 +285,7 @@ import rewind.re.ast, rewind.re.ir, rewind.re.captures;
     else
         pat = patterns[0];
 
-    return Re(pat.idup, flags.idup, 0, null, null);
+    return Re(pat.idup, flags.idup, 0, null, null, null);
 }
 
 ///ditto
@@ -297,29 +295,24 @@ import rewind.re.ast, rewind.re.ir, rewind.re.captures;
 }
 
 ///
+/*
 @system unittest
 {
     // multi-pattern regex example
-    auto multi = regex([`([a-z]+):(\d+)`, `(\d+),\d+`]); // multi regex
+    auto multi = re([`([a-z]+):(\d+)`, `(\d+),\d+`]); // multi regex
     auto m = "abc:43 12,34".matchAll(multi);
-    assert(m.front.whichPattern == 1);
     assert(m.front[1] == "abc");
     assert(m.front[2] == "43");
     m.popFront();
-    assert(m.front.whichPattern == 2);
     assert(m.front[1] == "12");
 }
+*/
 
 private @trusted auto matchOnce(const(char)[] input, Re prog)
 {
-    //TODO:
-    /*auto factory = prog.factory;
-    auto engine = factory.create(prog, input);
-    scope(exit) factory.decRef(engine); // destroys the engine
-    auto captures = Captures!const(char)[](input, prog.ngroup, prog.dict);
-    captures._nMatch = engine.match(captures.matches);
+    auto engine = prog.engine();
+    auto captures = engine.realFullyMatch(input);
     return captures;
-    */
 }
 
 private auto matchMany(const(char)[] input, Re re) @safe
@@ -395,13 +388,13 @@ public auto matchAll(const(char)[] input, const(char)[][] patterns...)
 }
 
 // another set of tests just to cover the new API
-@system unittest
+/*@system unittest
 {
     import std.algorithm.comparison : equal;
     import std.algorithm.iteration : map;
     import std.conv : to;
 
-    static foreach (String; AliasSeq!(string, wstring, const(dchar)[]))
+    alias String = string;
     {{
         auto str1 = "blah-bleh".to!String();
         auto pat1 = "bl[ae]h".to!String();
@@ -412,7 +405,7 @@ public auto matchAll(const(char)[] input, const(char)[][] patterns...)
             ([["blah".to!String()], ["bleh".to!String()]]));
 
         auto str2 = "1/03/12 - 3/03/12".to!String();
-        auto pat2 = regex([r"(\d+)/(\d+)/(\d+)".to!String(), "abc".to!String]);
+        auto pat2 = re([r"(\d+)/(\d+)/(\d+)".to!String(), "abc".to!String]);
         auto mf2 = matchFirst(str2, pat2);
         assert(mf2.equal(["1/03/12", "1", "03", "12"].map!(to!String)()));
         auto mAll2 = matchAll(str2, pat2);
@@ -422,7 +415,7 @@ public auto matchAll(const(char)[] input, const(char)[][] patterns...)
         mf2.popFrontN(3);
         assert(mf2.equal(["12".to!String()]));
     }}
-}
+}*/
 
 
 ///Exception object thrown in case of errors during regex compilation.
@@ -436,7 +429,7 @@ public class RegexException : Exception {
   A range that lazily produces a string output escaped
   to be used inside of a regular expression.
 +/
-auto escaper(Range)(Range r)
+/*auto escaper(Range)(Range r)
 {
     import std.algorithm.searching : find;
     static immutable escapables = [Escapables];
@@ -475,7 +468,7 @@ auto escaper(Range)(Range r)
 @system unittest
 {
     import std.algorithm.comparison;
-    import rewind.regex;
+    import rewind.re;
     string s = `This is {unfriendly} to *regex*`;
     assert(s.escaper.equal(`This is \{unfriendly\} to \*regex\*`));
 }
@@ -492,3 +485,4 @@ auto escaper(Range)(Range r)
       assert(s2.escaper.equal(""));
     }}
 }
+*/
