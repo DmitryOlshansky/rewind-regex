@@ -4,7 +4,7 @@
 		"Dmitry Olshansky"
 	],
 	"dependencies": {
-		
+		"pry": "0.4.0"
 	},
 	"description": "REwind Regex. Radical and brutal twin of std.regex library",
 	"copyright": "Copyright © 2018, Dmitry Olshansky",

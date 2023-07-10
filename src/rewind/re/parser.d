@@ -1,7 +1,7 @@
 module rewind.re.parser;
 
 import std.uni;
-//import pry;
+import pry;
 
 struct Parser {
     private const(char)[] pattern;
@@ -9,8 +9,10 @@ struct Parser {
         this.pattern = pattern;
         auto allowedChars =
 		unicode.Cc.add('"', '"'+1).add('\\', '\\'+1).inverted;
-        enum hex = CodepointSet('0', '9'+1, 'a', 'f'+1, 'A', 'F'+1);
-        /*with(parsers!(SimpleStream!(const(char)[]))) {
+        auto all = CodepointSet(dchar.min, dchar.max);
+        auto hex = CodepointSet('0', '9'+1, 'a', 'f'+1, 'A', 'F'+1);
+        with(parsers!(SimpleStream!(const(char)[]))) {
+            auto expr = dynamic();
             auto escapes = seq(tk!'\\', any(
                 tk!'"',
                 tk!'\\',
@@ -20,9 +22,26 @@ struct Parser {
                 tk!'n'.map!(_ => cast(dchar)'\n'),
                 tk!'r'.map!(_ => cast(dchar)'\r'),
                 tk!'t'.map!(_ => cast(dchar)'\t'),
-                seq(tk!'u', set!hex.rep!(4,4)).map!(x => cast(dchar)to!int(x[1], 16))
+                seq(tk!'u', set(hex).rep!(4,4)).map!(x => cast(dchar)to!int(x[1], 16))
             )).map!(x => x[1]);
-        }*/
+            auto atoms = any(
+                seq(tk!'(', expr, tk!')'),
+                escapes,
+                tk!'.',
+                set(all)
+            );
+            auto quantified = seq(
+                atoms,
+                any(
+                    seq(tk!'{', num, tk!',', num, tk!'}'),
+                    tk!'*',
+                    tk!'+',
+                    tk!'?'
+                )
+            );
+            
+
+        }
     }
 
 }
