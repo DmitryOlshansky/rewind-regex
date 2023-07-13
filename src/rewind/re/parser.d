@@ -33,10 +33,10 @@ struct Parser {
             auto quantified = seq(
                 atoms,
                 any(
-                    seq(tk!'{', num, tk!',', num, tk!'}'),
-                    tk!'*',
-                    tk!'+',
-                    tk!'?'
+                    seq(tk!'{', num, tk!',', num, tk!'}').map!(x => tuple(x[1], x[3])),
+                    tk!'*'.map!(x => tuple(0, -1)),
+                    tk!'+'.map!(x => tuple(1, -1)),
+                    tk!'?'.map!(x => tuple(0, 1)),
                 )
             );
             
