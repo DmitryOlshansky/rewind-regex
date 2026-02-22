@@ -7,7 +7,7 @@ struct Parser {
     private const(char)[] pattern;
     this(const(char)[] pattern) {
         this.pattern = pattern;
-        auto allowedChars =
+        /*auto allowedChars =
 		unicode.Cc.add('"', '"'+1).add('\\', '\\'+1).inverted;
         auto all = CodepointSet(dchar.min, dchar.max);
         auto hex = CodepointSet('0', '9'+1, 'a', 'f'+1, 'A', 'F'+1);
@@ -41,7 +41,7 @@ struct Parser {
             );
             
 
-        }
+        }*/
     }
 
 }

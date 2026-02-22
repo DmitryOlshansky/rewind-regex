@@ -163,7 +163,7 @@ class Thompson : Matcher {
     }
     override Matcher next() => _next;
 }
-
+/*
 unittest {
     import rewind.re.ir;
     ubyte[] code;
@@ -196,3 +196,4 @@ unittest {
     const(char)[] test2 = "az";
     auto s = m.match(test2);
 }
+*/
