@@ -30,6 +30,24 @@ class Pattern : Ast {
     }
 }
 
+class Group : Ast {
+    Ast inner;
+    int number;
+
+    this(Ast inner, int number) {
+        this.inner = inner;
+        this.number = number;
+    }
+
+    override string toDot() {
+        return inner.toDot(); // TODO: add grouping to DOT
+    }
+
+    override string repr() {
+        return "(" ~ inner.repr ~ ")";
+    }
+}
+
 class Seq : Ast {
     Ast[] seq;
 
