@@ -1,18 +1,18 @@
 module rewind.re.matcher;
 
-import rewind.re.captures;
+import rewind.re.match;
 
 interface Matcher {
     bool exact();
     bool realMatches(const(char)[] slice);
     bool realHasMatch(const(char)[] slice);
     const(char)[] realLocate(const(char)[] slice);
-    Captures realFullyMatch(ref const(char)[] slice);
+    bool realFullyMatch(ref const(char)[] slice, ref Captures captures);
     Matcher next(); // next matcher in the chain
 }
 
-Captures match(Matcher matcher, ref const(char)[] slice) {
-    return matcher.realFullyMatch(slice);
+bool match(Matcher matcher, ref const(char)[] slice, ref Captures captures) {
+    return matcher.realFullyMatch(slice, captures);
 }
 
 bool matches(Matcher matcher, const(char)[] slice) {
@@ -38,13 +38,13 @@ final class Empty : Matcher {
     bool realMatches(const(char)[] slice) { return true; }
     bool realHasMatch(const(char)[] slice) { return true; }
     const(char)[] realLocate(const(char)[] slice) { return null; }
-    Captures realFullyMatch(ref const(char)[] slice) {
+    bool realFullyMatch(ref const(char)[] slice, ref Captures captures) {
         if (slice.length > 0) {
             const cap = slice[0..1];
             slice = slice[1..$];
-            return [cap];
+            return true;
         }
-        return null;
+        return false;
     }
     Matcher next(){ return next_; }
 }
@@ -70,66 +70,22 @@ final class Char : Matcher {
         auto p = cast(char*)memchr(slice.ptr, ch, slice.length);
         return p == null ? null : slice[p - slice.ptr .. $];
     }
-    Captures realFullyMatch(ref const(char)[] slice) {
+    bool realFullyMatch(ref const(char)[] slice, ref Captures captures) {
         auto p = cast(char*)memchr(slice.ptr, ch, slice.length);
-        const(char)[][] captures = [];
-        captures ~= p == null ? null : slice[p - slice.ptr .. $];
-        return captures;
+        if (p != null) {
+            captures[0] = slice[p - slice.ptr .. $];
+        }
+        return p != null;
     }
     Matcher next(){ return next_; }
 }
-
-final class Backtracking : Matcher {
-    import rewind.re.ir;
-    private ubyte[] code;
-    private Matcher _next;
-
-    this(ubyte[] code, Matcher next) {
-        this.code = code;
-        this._next = next;
-    }
-    override bool exact() => true;
-    override bool realMatches(const(char)[] slice) {
-        return code.backtracking(slice);
-    }
-    override bool realHasMatch(const(char)[] slice) {
-        foreach (idx, ch; slice) {
-            auto p = slice[idx..$];
-            if (code.backtracking(p)) {
-                return true;
-            }
-        }
-        return false;
-    }
-    override const(char)[] realLocate(const(char)[] slice) {
-        foreach (idx, ch; slice) {
-            auto p = slice[idx..$];
-            if (code.backtracking(p)) {
-                slice = p;
-                return p;
-            }
-        }
-        return null;
-    }
-    override Captures realFullyMatch(ref const(char)[] slice) {
-        foreach (idx, ch; slice) {
-            auto p = slice[idx..$];
-            if (code.backtracking(p)) {
-                slice = p;
-                return [p];
-            }
-        }
-        return null;
-    }
-    override Matcher next() => _next;
-}
-
+/*
 class Thompson : Matcher {
-    import rewind.re.ir;
-    private ubyte[] code;
+    import rewind.re.re;
+    private uint[] code;
     private Matcher _next;
 
-    this(ubyte[] code, Matcher next) {
+    this(uint[] code, Matcher next) {
         this.code = code;
         this._next = next;
     }
@@ -163,7 +119,7 @@ class Thompson : Matcher {
     }
     override Matcher next() => _next;
 }
-/*
+
 unittest {
     import rewind.re.ir;
     ubyte[] code;

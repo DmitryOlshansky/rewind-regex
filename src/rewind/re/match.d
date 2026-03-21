@@ -1,6 +1,6 @@
-module rewind.re.captures;
+module rewind.re.match;
 
-import rewind.re.ir, rewind.re.matcher;
+import rewind.re.re, rewind.re.matcher;
 
 
 /++
@@ -21,6 +21,7 @@ alias Captures = const(char)[][];
 {
 private:
     const(char)[] _input;
+    bool _hasMatch;
     Captures _captures;
     Re _re;
 
@@ -29,7 +30,7 @@ public:
     {
         _input = input;
         _re = prog;
-        _captures = _re.engine().match(input);
+        _hasMatch = _re.engine().match(input, _captures);
     }
 
     ///Shorthands for front.pre, front.post, front.hit.
@@ -70,14 +71,14 @@ public:
     ///ditto
     void popFront()
     {
-        _captures = _re.engine().match(_input);
+        _hasMatch = _re.engine().match(_input, _captures);
     }
 
     ///ditto
     auto save(){ return this; }
 
     ///Test if this match object is empty.
-    @property bool empty() const { return _captures == null; }
+    @property bool empty() const { return !_hasMatch; }
 
     ///Same as !(x.empty), provided for its convenience  in conditional statements.
     T opCast(T:bool)(){ return !empty; }

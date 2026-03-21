@@ -240,7 +240,7 @@ Macros:
 module rewind.re;
 
 import std.range.primitives;
-import rewind.re.ast, rewind.re.ir, rewind.re.captures;
+import rewind.re.ast, rewind.re.re, rewind.re.match;
 
 /++
     Compile regular expression pattern for the later execution.
@@ -285,7 +285,7 @@ import rewind.re.ast, rewind.re.ir, rewind.re.captures;
     else
         pat = patterns[0];
 
-    return Re(pat.idup, flags.idup, 0, null, null, null);
+    return new Re(pat.idup, flags.idup, 0, null, null);
 }
 
 ///ditto
@@ -311,13 +311,17 @@ import rewind.re.ast, rewind.re.ir, rewind.re.captures;
 private @trusted auto matchOnce(const(char)[] input, Re prog)
 {
     auto engine = prog.engine();
-    auto captures = engine.realFullyMatch(input);
-    return captures;
+    Captures captures = new const(char)[][](prog.ngroup+1);
+    if (engine.realFullyMatch(input, captures)) {
+      return captures;
+    } else {
+      return null;
+    }
 }
 
 private auto matchMany(const(char)[] input, Re re) @safe
 {
-    return RegexMatch(input, re.withFlags(re.flags ~ "g"));
+    return RegexMatch(input, re);
 }
 
 /++
