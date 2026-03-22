@@ -14,6 +14,7 @@ enum Opcode : ubyte {
     INTERVALS,
     BIT,
     TRIE,
+    MARK,
 
     JMP,
     FORK,
@@ -89,16 +90,17 @@ struct BytecodeBuilder {
     }
 }
 
-uint[] setMergePoints(uint[] code) {
+size_t setMergePoints(uint[] code) {
     int pc = 0;
     bool[] passes = new bool[code.length];
     Stack!int threads;
-
+    size_t mergePoints = 0;
 L_outer:
     while (pc < code.length) {
         auto op = (code[pc] >> 24) & 0x7F;
         auto val = code[pc] & 0xFF_FFFF;
         while (passes[pc] == true) { // execution passes more then once
+            mergePoints++;
             code[pc] |= (1<<31);
             if (threads.empty) break L_outer;
             pc = threads.pop();
@@ -109,7 +111,7 @@ L_outer:
             case CHAR:
             case NOTCHAR:
             case TRIE:
-            case END:
+            case MARK:
                 pc++;
                 break;
             case ONE_OF:
@@ -129,6 +131,9 @@ L_outer:
                 threads.push((pc + val) & 0xFF_FFFF);
                 pc++;
                 break;
+            case END:
+                pc++;
+                break L_outer;
             default:
                 assert(false);
         }
@@ -137,7 +142,7 @@ L_outer:
         pc = threads.pop();
         goto L_outer;
     }
-    return code;
+    return mergePoints;
 }
 
 string decode(uint[] code) pure {
@@ -187,6 +192,10 @@ string decode(uint[] code) pure {
                 formattedWrite(app, "TRIE %d", val);
                 pc++;
                 break;
+            case MARK:
+                formattedWrite(app, "MARK %d", val);
+                pc++;
+                break;
             case JMP:
                 auto target = (val + pc) & 0xFF_FFFF;
                 formattedWrite(app, "JMP => %d", target);
@@ -198,7 +207,7 @@ string decode(uint[] code) pure {
                 pc++;
                 break;
             case END:
-                app.put("END");
+                formattedWrite(app, "END %d", val);
                 pc++;
                 break;
             default:
@@ -224,6 +233,8 @@ unittest {
 17\tJMP => 19
 18\tCHAR 'z'
 19\tFORK => 3
+20\tMARK 42
+21\tEND 1
 ";
     with (Opcode) with(builder) {
         code(ANY, 0);
@@ -237,6 +248,11 @@ unittest {
         code(CHAR, 'z');
         size_t forkStart = code(FORK, 0);
         fixup(forkStart, cast(int)(forkDest - forkStart));
+        code(MARK, 42);
+        code(END, 1);
     }
-    assert(decode(builder.build.setMergePoints) == result);
+    uint[] code = builder.build;
+    size_t mergePoints = code.setMergePoints();
+    assert(mergePoints == 1);
+    assert(decode(code) == result);
 }
