@@ -53,7 +53,7 @@ struct HeadTailList {
     }
 }
 
-bool thompson(uint[] code, ulong[] mergeTable, ref size_t genCounter, int marks, int mergePoints, ref const(char)[] slice, ref const(char)[][] captures) {
+bool thompson(uint[] code, ulong[] mergeTable, ref size_t genCounter, int marks, int mergePoints, ref const(char)[] slice, const(char)[][] captures) {
     assert(marks % 2 == 0);
     void[] memory = arena.allocate(ThompsonThread.sizeOf(marks) * (mergePoints + 2));
     void* stack = memory.ptr;

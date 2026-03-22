@@ -2,6 +2,9 @@ module rewind.re.bytecode;
 
 import std.array, std.range, std.uni;
 
+import rewind.re.impl.stack;
+
+
 enum Opcode : ubyte {
     ANY = 0,
     CHAR,
@@ -86,6 +89,57 @@ struct BytecodeBuilder {
     }
 }
 
+uint[] setMergePoints(uint[] code) {
+    int pc = 0;
+    bool[] passes = new bool[code.length];
+    Stack!int threads;
+
+L_outer:
+    while (pc < code.length) {
+        auto op = (code[pc] >> 24) & 0x7F;
+        auto val = code[pc] & 0xFF_FFFF;
+        while (passes[pc] == true) { // execution passes more then once
+            code[pc] |= (1<<31);
+            if (threads.empty) break L_outer;
+            pc = threads.pop();
+        }
+        passes[pc] = true;
+        switch(op) with (Opcode) {
+            case ANY:
+            case CHAR:
+            case NOTCHAR:
+            case TRIE:
+            case END:
+                pc++;
+                break;
+            case ONE_OF:
+            case NOT_ONE_OF:
+                pc += 1 + val;
+                break;
+            case INTERVALS:
+                pc += 1 + 2 * val;
+                break;
+            case BIT:
+                pc += 5;
+                break;
+            case JMP:
+                pc = (pc + val) & 0xFF_FFFF;
+                break;
+            case FORK:
+                threads.push((pc + val) & 0xFF_FFFF);
+                pc++;
+                break;
+            default:
+                assert(false);
+        }
+    }
+    if (!threads.empty) {
+        pc = threads.pop();
+        goto L_outer;
+    }
+    return code;
+}
+
 string decode(uint[] code) pure {
     import std.format, std.algorithm, std.conv, std.range;
     auto app = appender!(char[])();
@@ -123,7 +177,7 @@ string decode(uint[] code) pure {
                 formattedWrite(app, "INTERVALS %( %s, %)", 
                     code[pc+1..pc+1+2*val].chunks(2).map!(x => charRepr(x[0]) ~ ".." ~ charRepr(x[1]-1))
                 );
-                pc += 1 + val;
+                pc += 1 + 2 * val;
                 break;
             case BIT:
                 formattedWrite(app, "BIT %( %x, %)", code[pc+1..pc+5]);
@@ -159,14 +213,12 @@ string decode(uint[] code) pure {
 }
 
 unittest {
-    import std.stdio;
     auto builder = BytecodeBuilder(1);
     string result = "0\tANY
 1\tCHAR 'a'
 2\tNOT_CHAR 'b'
-3\tONE_OF  \"'a'\",  \"'b'\"
+3\tONE_OF  \"'a'\",  \"'b'\" MERGE POINT
 6\tINTERVALS  \"'a'..'z'\"
-8\tANY
 9\tNOT_ONE_OF  \"'a'\",  \"'d'\"
 12\tBIT  0,  0,  0,  400052
 17\tJMP => 19
@@ -186,5 +238,5 @@ unittest {
         size_t forkStart = code(FORK, 0);
         fixup(forkStart, cast(int)(forkDest - forkStart));
     }
-    assert(decode(builder.build) == result);
+    assert(decode(builder.build.setMergePoints) == result);
 }
