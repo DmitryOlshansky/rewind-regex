@@ -64,13 +64,14 @@ bool thompson(uint[] code, ulong[] mergeTable, ref size_t genCounter, int marks,
     assert(marks % 2 == 0);
     void[] memory = arena.allocate(ThompsonThread.sizeOf(marks) * (mergePoints + 2));
     void* stack = memory.ptr;
+    auto input = slice;
     auto ret = thompsonVM(code.ptr, stack, mergeTable.ptr, genCounter, marks, slice);
     if (ret == null) {
         return false;
     }
     size_t[] m = ret.marks.ptr[0..marks];
     for (size_t i = 0; i < m.length; i += 2) {
-        captures[i/2] = slice[m[i]..m[i+1]];
+        captures[i/2] = input[m[i]..m[i+1]];
     }
     return true;
 }
@@ -318,4 +319,30 @@ unittest {
     assert(vm.run("abc", null));
     assert(vm.run("ab", null));
     assert(!vm.run("acc", null));
+}
+
+//marks and jmps
+unittest {
+    import std.uni;
+    BytecodeBuilder builder;
+    with (builder) with(Opcode) {
+        code(MARK, 0);
+        code(NOTCHAR, 'a');
+        code(MARK, 2);
+        size_t to_end = code(JMP, 0);
+        size_t start = code(CodepointSet('a', 'z'+1, 'A', 'Z'+1, '0', '9'+1));
+        size_t loop_back = code(FORK, 0);
+        fixup(to_end, cast(int)(loop_back - to_end));
+        fixup(loop_back, cast(int)(start - loop_back));
+        code(MARK, 3);
+        code(CodepointSet('a', 'a'+1, 'c', 'c'+1));
+        code(MARK, 1);
+        code(END, 1);
+    }
+    auto vm = builder.toVM();
+    assert(vm.run("bbc", null));
+    const(char)[][] cap = new const(char)[][](2);
+    assert(vm.run("bbAZ09c", cap));
+    assert(cap[0] == "bbAZ09c");
+    assert(cap[1] == "bAZ09");
 }
