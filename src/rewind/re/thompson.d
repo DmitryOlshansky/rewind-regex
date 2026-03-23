@@ -340,6 +340,7 @@ unittest {
         code(END, 1);
     }
     auto vm = builder.toVM();
+    assert(!vm.run("abc", null));
     assert(vm.run("bbc", null));
     const(char)[][] cap = new const(char)[][](2);
     assert(vm.run("bbAZ09c", cap));
