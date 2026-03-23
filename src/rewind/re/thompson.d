@@ -60,12 +60,12 @@ struct HeadTailList {
     }
 }
 
-bool thompson(uint[] code, ulong[] mergeTable, ref size_t genCounter, int marks, size_t mergePoints, ref const(char)[] slice, const(char)[][] captures) {
+bool thompson(uint[] code, bool search, ulong[] mergeTable, ref size_t genCounter, int marks, size_t mergePoints, ref const(char)[] slice, const(char)[][] captures) {
     assert(marks % 2 == 0);
     void[] memory = arena.allocate(ThompsonThread.sizeOf(marks) * (mergePoints + 2));
     void* stack = memory.ptr;
     auto input = slice;
-    auto ret = thompsonVM(code.ptr, stack, mergeTable.ptr, genCounter, marks, slice);
+    auto ret = thompsonVM(code.ptr, search, stack, mergeTable.ptr, genCounter, marks, slice);
     if (ret == null) {
         return false;
     }
@@ -76,7 +76,7 @@ bool thompson(uint[] code, ulong[] mergeTable, ref size_t genCounter, int marks,
     return true;
 }
 
-ThompsonThread* thompsonVM(uint* code, void* stack, ulong* mergeTable, ref size_t genCounter, int marks,  ref const(char)[] slice) {
+ThompsonThread* thompsonVM(uint* code, bool search, void* stack, ulong* mergeTable, ref size_t genCounter, int marks,  ref const(char)[] slice) {
     static import std.utf;
     ThompsonThread* freelist = null;
     ThompsonThread* fork(size_t pc, size_t[] markArray = null) {
@@ -246,22 +246,23 @@ ThompsonThread* thompsonVM(uint* code, void* stack, ulong* mergeTable, ref size_
     clist.push(fork(0));
     ThompsonThread* t;
     while(!clist.empty) {
+        size_t offset = idx;
         if (idx == input.length) {
             t = exec!false(dchar.init, idx);
         } else {
-            size_t offset = idx;
             dchar ch = decode(input, idx);
             t = exec!true(ch, offset);
+            if (search) {
+                nlist.push(fork(0));
+            }
         }
         genCnt++;
         if (t) {
+            slice = input[offset..$];
             break;
         }
         clist = nlist;
         nlist = HeadTailList(null, null);
-    }
-    if (t) {
-        slice = input[idx..$];
     }
     genCounter = genCnt;
     return t;
@@ -274,7 +275,11 @@ struct Thompson {
     size_t genCounter;
 
     bool run(const(char)[] slice, const(char)[][] captures) {
-        return thompson(code, mergeTable, genCounter, cast(int)captures.length*2, mergePoints, slice, captures);
+        return thompson(code, false, mergeTable, genCounter, cast(int)captures.length*2, mergePoints, slice, captures);
+    }
+
+    bool search(const(char)[] slice, const(char)[][] captures) {
+        return thompson(code, true, mergeTable, genCounter, cast(int)captures.length*2, mergePoints, slice, captures);
     }
 }
 
@@ -299,10 +304,13 @@ unittest {
     ulong[] mergeTable = new ulong[code.length];
     size_t genCounter = 0;
     const(char)[] slice = "abc";
-    assert(thompson(code, mergeTable, genCounter, 0, mergePoints, slice, null));
+    assert(thompson(code, false, mergeTable, genCounter, 0, mergePoints, slice, null));
     assert(slice == "");
     slice = "abb";
-    assert(!thompson(code, mergeTable, genCounter, 0, mergePoints, slice, null));
+    assert(!thompson(code, false, mergeTable, genCounter, 0, mergePoints, slice, null));
+    slice = "aaabcd";
+    assert(thompson(code, true, mergeTable, genCounter, 0, mergePoints, slice, null));
+    assert(slice == "d");
 }
 
 // simple loop
