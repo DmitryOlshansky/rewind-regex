@@ -96,7 +96,6 @@ MemReg mem(Register base, Register offset, ExtendType ext = ExtendType.LSL, bool
 Immediate imm(uint val) { return Immediate(val); }
 Register x(uint id) { return Register(id, RegSize.X); }
 Register w(uint id) { return Register(id, RegSize.W); }
-Memory mem(Register base, uint scaledOffset = 0) { return Memory(base, scaledOffset); }
 
 // --- Assembler Struct ---
 struct Assembler {
@@ -140,6 +139,11 @@ struct Assembler {
         // ARM64 has separate data and instruction caches. 
         // This builtin flushes the cache lines to prevent executing stale data.
         __builtin___clear_cache(cast(char*)buffer, cast(char*)(buffer + count));
+    }
+
+    /// Slice of encoded instructions so far
+    uint[] data() {
+        return buffer[0..count];
     }
 
     /// Casts the internal buffer to a callable C-style function pointer
@@ -194,14 +198,6 @@ struct Assembler {
         uint sf = (rd.size == RegSize.X) ? 1 : 0;
         // Encoding: sf(31) 000 1011 0000 Rm(20:16) 000000 Rn(9:5) Rd(4:0)
         emit((sf << 31) | 0x0B000000 | (rm.id << 16) | (rn.id << 5) | rd.id);
-    }
-
-    /// LDR - Load register from memory (Unsigned immediate offset)
-    void ldr(Register rt, Memory m) {
-        uint size = (rt.size == RegSize.X) ? 3 : 2;
-        uint imm12 = m.scaledOffset & 0xFFF;
-        // Encoding: size(31:30) 11 1001 01 imm12(21:10) Rn(9:5) Rt(4:0)
-        emit((size << 30) | 0x39400000 | (imm12 << 10) | (m.base.id << 5) | rt.id);
     }
 
     /// B - Unconditional Branch
@@ -379,10 +375,39 @@ struct Assembler {
         }
     }
 
+    void br(Register rn) {
+        // Encoding: 1101 0110 0000 1111 0000 0000 0000 Rn
+        //          31..21       20..5                      4..0
+        enforce(rn.size == RegSize.X, "BR requires an X register");
+        emit(0xD61F0000 | (rn.id << 5));
+    }
+
+    /// BLR Xn -- indirect call (branch with link to register)
+    void blr(Register rn) {
+        // Encoding: 1101 0110 0001 1111 0000 0000 0000 Rn
+        enforce(rn.size == RegSize.X, "BLR requires an X register");
+        emit(0xD63F0000 | (rn.id << 5));
+    }
+
     private void emitCondBranch(Condition cond, int targetOffset) {
         int diff = targetOffset - cast(int)count;
         uint imm19 = diff & 0x0007FFFF; // Mask to 19 bits
         // Encoding: 01010100 imm19(23:5) 0 cond(3:0)
         emit(0x54000000 | (imm19 << 5) | cond);
     }
+}
+
+
+unittest {
+    auto assembler = Assembler(16 * 1024);
+    with(assembler) {
+        auto lbl = createLabel();
+        mov(x(2), imm(256));
+        mov(x(1), x(2));
+        bind(lbl);
+        add(x(2), x(11), x(12));
+        b(lbl);
+    }
+    import std.file;
+    std.file.write("data.bin", cast(ubyte[])assembler.data);
 }
