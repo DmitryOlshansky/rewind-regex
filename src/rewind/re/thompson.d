@@ -60,12 +60,18 @@ struct HeadTailList {
     }
 }
 
-bool thompson(uint[] code, bool search, ulong[] mergeTable, ref size_t genCounter, int marks, size_t mergePoints, ref const(char)[] slice, const(char)[][] captures) {
+bool thompson(uint[] code, bool search, ulong[] mergeTable, ref size_t genCounter, int marks, size_t mergePoints, ref const(char)[] slice, const(char)[][] captures, void* nativeCode=null) {
     assert(marks % 2 == 0);
     void[] memory = arena.allocate(ThompsonThread.sizeOf(marks) * (mergePoints + 2));
     void* stack = memory.ptr;
     auto input = slice;
-    auto ret = thompsonVM(code.ptr, search, stack, mergeTable.ptr, genCounter, marks, slice);
+    ThompsonThread* ret;
+    if (nativeCode) {
+        auto nativeFn = cast(ThompsonThread* function(bool, void*, ulong*, ref size_t, int,  ref const(char)[] slice))nativeCode;
+        ret = nativeFn(search, stack, mergeTable.ptr, genCounter, marks, slice);
+    } else {
+        ret = thompsonVM(code.ptr, search, stack, mergeTable.ptr, genCounter, marks, slice);
+    }
     if (ret == null) {
         return false;
     }
@@ -273,21 +279,23 @@ struct Thompson {
     ulong[] mergeTable;
     size_t mergePoints;
     size_t genCounter;
+    void* nativeCode;
 
     bool run(const(char)[] slice, const(char)[][] captures) {
-        return thompson(code, false, mergeTable, genCounter, cast(int)captures.length*2, mergePoints, slice, captures);
+        return thompson(code, false, mergeTable, genCounter, cast(int)captures.length*2, mergePoints, slice, captures, nativeCode);
     }
 
     bool search(const(char)[] slice, const(char)[][] captures) {
-        return thompson(code, true, mergeTable, genCounter, cast(int)captures.length*2, mergePoints, slice, captures);
+        return thompson(code, true, mergeTable, genCounter, cast(int)captures.length*2, mergePoints, slice, captures, nativeCode);
     }
 }
 
-Thompson toVM(BytecodeBuilder builder) {
+Thompson toVM(BytecodeBuilder builder, bool native=false) {
     uint[] code = builder.build();
     size_t mergePoints = code.setMergePoints();
     ulong[] mergeTable = new ulong[code.length];
-    return Thompson(code, mergeTable, mergePoints, 0);
+    void* nativeCode =  native ? compileNativeCode(code) : null;
+    return Thompson(code, mergeTable, mergePoints, 0, nativeCode);
 }
 
 // basic test
@@ -354,4 +362,25 @@ unittest {
     assert(vm.run("bbAZ09c", cap));
     assert(cap[0] == "bbAZ09c");
     assert(cap[1] == "bAZ09");
+}
+
+
+void* compileNativeCode(uint[] code) {
+    import rewind.re.dynasm.arm64;
+    Assembler assembler = Assembler(64 * 1024);
+    with(assembler){
+        mov(x(0), imm(0));
+        ret();
+    }
+    assembler.finalize();
+    return assembler.data.ptr;
+}
+
+unittest {
+    BytecodeBuilder builder;
+    with (builder) with(Opcode) {
+        code(END, 1);
+    }
+    auto native = toVM(builder, true);
+    assert(!native.run("abc", null));
 }

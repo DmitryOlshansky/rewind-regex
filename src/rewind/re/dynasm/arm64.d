@@ -5,7 +5,7 @@ import std.exception : enforce;
 import std.stdio : writeln;
 
 // LLVM/GCC intrinsic for instruction cache flushing (critical for ARM64 JITs)
-extern(C) void __builtin___clear_cache(char* begin, char* end);
+extern(C) void __clear_cache(char* begin, char* end);
 
 // --- Operand Types ---
 enum RegSize { W = 0, X = 1 }
@@ -126,9 +126,9 @@ struct Assembler {
     @disable this(this); // Prevent copying to safely manage mmap lifecycle
 
     ~this() {
-        if (buffer) {
+        /*if (buffer) {
             munmap(buffer, capacity * uint.sizeof);
-        }
+        }*/
     }
 
     /// Transitions memory from Writable to Executable and flushes I-Cache
@@ -138,7 +138,7 @@ struct Assembler {
 
         // ARM64 has separate data and instruction caches. 
         // This builtin flushes the cache lines to prevent executing stale data.
-        __builtin___clear_cache(cast(char*)buffer, cast(char*)(buffer + count));
+        __clear_cache(cast(char*)buffer, cast(char*)(buffer + count));
     }
 
     /// Slice of encoded instructions so far
