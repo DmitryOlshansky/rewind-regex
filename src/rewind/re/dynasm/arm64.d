@@ -104,9 +104,17 @@ struct Assembler {
         size_t capacity;
         size_t count; // Current instruction count (word offset)
         
+        enum FixupKind : ubyte {
+            B,
+            BCond,
+            ADR,
+            LdrLit64,
+        }
+
         struct Fixup {
             uint instrOffset; // Word offset of the branch instruction
             uint labelId;     // ID of the unbound label
+            FixupKind kind;
         }
         
         Fixup[] fixups;
@@ -165,7 +173,7 @@ struct Assembler {
         // Resolve forward references
         foreach (ref f; fixups) {
             if (f.labelId == lbl.id) {
-                patchBranch(f.instrOffset, lbl.offset);
+                patchFixup(f, lbl.offset);
             }
         }
     }
@@ -204,7 +212,7 @@ struct Assembler {
     void b(ref Label lbl) {
         if (lbl.offset == -1) {
             // Forward reference: Save fixup offset, emit a dummy placeholder
-            fixups ~= Fixup(cast(uint)count, lbl.id);
+            fixups ~= Fixup(cast(uint)count, lbl.id, FixupKind.B);
             emit(0x14000000); 
         } else {
             // Backward reference: Emit with immediate offset
@@ -218,6 +226,31 @@ struct Assembler {
         emit(0xD65F0000 | (rn.id << 5));
     }
 
+    void adr(Register rd, ref Label lbl) {
+        enforce(rd.size == RegSize.X, "ADR requires an X register");
+
+        if (lbl.offset == -1) {
+            fixups ~= Fixup(cast(uint)count, lbl.id, FixupKind.ADR);
+            emit(0x10000000 | rd.id); // placeholder, Rd already encoded
+        } else {
+            emitAdr(rd, lbl.offset);
+        }
+    }
+
+    private void emitAdr(Register rd, int targetOffset) {
+        int diffInstrs = targetOffset - cast(int)count;
+        long diffBytes = cast(long)diffInstrs * 4;
+
+        enforce(diffBytes >= -(1 << 20) && diffBytes < (1 << 20),
+                "ADR target out of range (+/-1MB)");
+
+        uint imm = cast(uint)diffBytes & 0x1FFFFF;
+        uint immlo = imm & 0x3;
+        uint immhi = imm >> 2;
+
+        emit(0x10000000 | (immlo << 29) | (immhi << 5) | rd.id);
+    }
+
     // --- Branch Resolution Internals ---
 
     private void emitBranch(int targetOffset) {
@@ -225,29 +258,6 @@ struct Assembler {
         uint imm26 = diff & 0x03FFFFFF; // Mask to 26 bits
         emit(0x14000000 | imm26);
     }
-
-    private void patchBranch(uint instrOffset, int targetOffset) {
-        int diff = targetOffset - cast(int)instrOffset;
-        uint instr = buffer[instrOffset];
-        
-        if ((instr & 0xFC000000) == 0x14000000) { 
-            // It's an Unconditional Branch (B)
-            // Range: ±32MB (26 bits)
-            uint imm26 = diff & 0x03FFFFFF;
-            buffer[instrOffset] = (instr & 0xFC000000) | imm26;
-        } 
-        else if ((instr & 0xFF000000) == 0x54000000) { 
-            // It's a Conditional Branch (B.cond)
-            // Range: ±1MB (19 bits)
-            uint imm19 = diff & 0x0007FFFF;
-            // 0xFF00001F masks out the old immediate but preserves the opcode (top 8) and condition (bottom 5)
-            buffer[instrOffset] = (instr & 0xFF00001F) | (imm19 << 5);
-        } 
-        else {
-            enforce(false, "Unsupported branch instruction encountered during fixup");
-        }
-    }
-
 
     private uint getSizeBits(Register r) {
         return (r.size == RegSize.X) ? 3 : 2; // 3 for 64-bit (X), 2 for 32-bit (W)
@@ -296,6 +306,27 @@ struct Assembler {
         uint S = m.shift ? 1 : 0;
         // Encoding: size(31:30) 11 1000 011 Rm(20:16) option(15:13) S(12) 10 Rn(9:5) Rt(4:0)
         emit((sz << 30) | 0x38600800 | (m.offset.id << 16) | (m.ext << 13) | (S << 12) | (m.base.id << 5) | rt.id);
+    }
+
+    void ldr(Register rt, ref Label lbl) {
+        enforce(rt.size == RegSize.X, "ldr label requires an X register");
+
+        if (lbl.offset == -1) {
+            fixups ~= Fixup(cast(uint)count, lbl.id, FixupKind.LdrLit64);
+            emit(0x58000000 | rt.id); // placeholder, Rt already encoded
+        } else {
+            emitLdrLit(rt, lbl.offset);
+        }
+    }
+
+    private void emitLdrLit(Register rt, int targetOffset) {
+        int diffInstrs = targetOffset - cast(int)count;
+
+        enforce(diffInstrs >= -(1 << 18) && diffInstrs < (1 << 18),
+                "LDR literal target out of range (+/-1MB, word-scaled)");
+
+        uint imm19 = cast(uint)diffInstrs & 0x7FFFF;
+        emit(0x58000000 | (imm19 << 5) | rt.id);
     }
 
     // ==========================================
@@ -367,7 +398,7 @@ struct Assembler {
         if (lbl.offset == -1) {
             // Forward reference: Save fixup offset, emit a dummy placeholder
             // Include the condition code in the dummy instruction so patchBranch preserves it
-            fixups ~= Fixup(cast(uint)count, lbl.id);
+            fixups ~= Fixup(cast(uint)count, lbl.id, FixupKind.BCond);
             emit(0x54000000 | cond); 
         } else {
             // Backward reference: Emit with immediate offset
@@ -394,6 +425,49 @@ struct Assembler {
         uint imm19 = diff & 0x0007FFFF; // Mask to 19 bits
         // Encoding: 01010100 imm19(23:5) 0 cond(3:0)
         emit(0x54000000 | (imm19 << 5) | cond);
+    }
+
+    private void patchFixup(Fixup f, int targetOffset) {
+        uint instr = buffer[f.instrOffset];
+        int diffInstrs = targetOffset - cast(int)f.instrOffset;
+
+        final switch (f.kind) {
+        case FixupKind.B:
+            enforce(diffInstrs >= -(1 << 25) && diffInstrs < (1 << 25),
+                    "B target out of range");
+            uint imm26 = cast(uint)diffInstrs & 0x03FF_FFFF;
+            buffer[f.instrOffset] = (instr & 0xFC00_0000) | imm26;
+            break;
+
+        case FixupKind.BCond:
+            enforce(diffInstrs >= -(1 << 18) && diffInstrs < (1 << 18),
+                    "B.cond target out of range");
+            uint imm19 = cast(uint)diffInstrs & 0x7FFFF;
+            buffer[f.instrOffset] = (instr & 0xFF00_001F) | (imm19 << 5);
+            break;
+
+        case FixupKind.ADR:
+            long diffBytes = cast(long)diffInstrs * 4;
+            enforce(diffBytes >= -(1 << 20) && diffBytes < (1 << 20),
+                    "ADR target out of range");
+            uint imm = cast(uint)diffBytes & 0x1F_FFFF;
+            uint immlo = imm & 0x3;
+            uint immhi = imm >> 2;
+            buffer[f.instrOffset] =
+                (instr & 0x9F00_001F) |   // preserve op bits and Rd
+                (immlo << 29) |
+                (immhi << 5);
+            break;
+
+        case FixupKind.LdrLit64:
+            enforce(diffInstrs >= -(1 << 18) && diffInstrs < (1 << 18),
+                    "LDR literal target out of range");
+            uint imm19 = cast(uint)diffInstrs & 0x7FFFF;
+            buffer[f.instrOffset] =
+                (instr & 0xFF00_001F) |   // preserve opcode and Rt
+                (imm19 << 5);
+            break;
+        }
     }
 }
 
