@@ -381,7 +381,7 @@ void* compileNativeCode(uint[] code) {
         NLIST_HEAD = x(9),
         NLIST_TAIL = x(10),
         FREELIST = x(11),
-        CHAR = x(12),
+        CUR_CHAR = w(12),
         SCRATCH = x(13),
         GEN_COUNTER = x(14),
         INPUT = x(15),
@@ -395,11 +395,17 @@ void* compileNativeCode(uint[] code) {
         codeLabels[i] = assembler.createLabel();
     }
     with(assembler) with (Condition) {
+        auto nextStep = createLabel();
+        auto nextStepCont = createLabel();
         mov(CLIST_HEAD, imm(0));
         mov(CLIST_TAIL, imm(0));
         mov(NLIST_HEAD, imm(0));
         mov(NLIST_TAIL, imm(0));
         mov(FREELIST, imm(0));
+        ldr(INPUT, mem(SLICE, 8));
+        ldr(INPUT_END, mem(SLICE));
+        add(INPUT_END, INPUT_END, INPUT);
+        ldr(GEN_COUNTER, mem(REF_GENCOUNTER));
         void fork(Register reg, ref Label lbl, bool marks) {
             auto end = createLabel();
             auto stack = createLabel();
@@ -448,15 +454,58 @@ void* compileNativeCode(uint[] code) {
             str(ZERO, mem(reg)); // nulify next pointer for reg
         bind(end);
         }
+        void readChar() {
+            auto empty = createLabel();
+            auto end = createLabel();
+            cmp(INPUT, INPUT_END);
+            b(EQ, empty);
+            ldrb(CUR_CHAR, post(INPUT, 1));
+            b(end);
+        bind(empty);
+            mov(CUR_CHAR, imm(-1));
+        bind(end);
+        }
+        void dispatch() {
+            popList(CURRENT, CLIST_HEAD, CLIST_TAIL);
+            cmp(CURRENT, ZERO);
+            b(EQ, nextStep);
+            ldr(SCRATCH, mem(CURRENT, 8));
+            br(SCRATCH);
+        }
+        readChar();
         fork(CURRENT, codeLabels[0], false);
         ldr(SCRATCH, mem(CURRENT, 8));
         br(SCRATCH);
+    bind(nextStep);
+        mov(CLIST_HEAD, NLIST_HEAD);
+        mov(CLIST_TAIL, NLIST_TAIL);
+        mov(NLIST_HEAD, imm(0));
+        mov(NLIST_TAIL, imm(0));
+        popList(CURRENT, CLIST_HEAD, CLIST_TAIL);
+        cmp(CURRENT, ZERO);
+        b(NE, nextStepCont);
+        mov(x(0), ZERO);
+        ret();
+    bind(nextStepCont);
+        readChar();
+        ldr(SCRATCH, mem(CURRENT, 8));
+        br(SCRATCH);
         for (size_t i = 0; i < code.length; i++) {
-            bind(codeLabels[i]);
+        bind(codeLabels[i]);
             auto op = (code[i] >> 24) & 0x7f;
             auto val = code[i] & 0xFF_FFFF;
             switch (op) with (Opcode)  {
             case CHAR:
+                auto skipOver = createLabel();
+                mov(SCRATCH, imm(val)); // TODO: extend mov to handle large immediates
+                cmp(CUR_CHAR, SCRATCH);
+                b(NE, skipOver);
+                adr(SCRATCH, codeLabels[i+1]);
+                str(SCRATCH, mem(CURRENT, 8));
+                pushList(CURRENT, NLIST_HEAD, NLIST_TAIL);
+            bind(skipOver);
+                dispatch();
+                break;
             case END:
                 mov(x(0), CURRENT);
                 ret();
@@ -473,8 +522,10 @@ void* compileNativeCode(uint[] code) {
 unittest {
     BytecodeBuilder builder;
     with (builder) with(Opcode) {
+        code(CHAR, 'a');
         code(END, 1);
     }
     auto native = toVM(builder, true);
     assert(native.run("abc", null));
+    assert(!native.run("bc", null));
 }

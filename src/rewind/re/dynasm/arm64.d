@@ -330,6 +330,51 @@ struct Assembler {
     }
 
     // ==========================================
+    // LDRB - Load byte, zero-extend into Wt
+    // ==========================================
+
+    void ldrb(Register rt, MemImm m) {
+        requireW(rt, "ldrb");
+        enforce(m.offset >= 0 && m.offset <= 4095,
+                "LDRB unsigned offset must be in range 0..4095");
+        uint imm12 = cast(uint)m.offset;
+        // Base opcode for LDRB unsigned offset
+        emit(0x39400000 | (imm12 << 10) | (m.base.id << 5) | rt.id);
+    }
+
+    void ldrb(Register rt, MemPre m) {
+        requireW(rt, "ldrb");
+        enforce(m.offset >= -256 && m.offset <= 255,
+                "LDRB pre-index offset must be in range -256..255");
+        uint imm9 = cast(uint)m.offset & 0x1FF;
+        // Base opcode for LDRB pre-index
+        emit(0x38400C00 | (imm9 << 12) | (m.base.id << 5) | rt.id);
+    }
+
+    void ldrb(Register rt, MemPost m) {
+        requireW(rt, "ldrb");
+        enforce(m.offset >= -256 && m.offset <= 255,
+                "LDRB post-index offset must be in range -256..255");
+        uint imm9 = cast(uint)m.offset & 0x1FF;
+        // Base opcode for LDRB post-index
+        emit(0x38400400 | (imm9 << 12) | (m.base.id << 5) | rt.id);
+    }
+
+    void ldrb(Register rt, MemReg m) {
+        requireW(rt, "ldrb");
+
+        // For byte loads, shift-by-access-size is shift-by-0, so force false or ignore it.
+        enforce(!m.shift, "LDRB register-offset does not need scaled shift");
+
+        // Base opcode for LDRB register offset
+        emit(0x38600800 |
+            (m.offset.id << 16) |
+            (cast(uint)m.ext << 13) |
+            (m.base.id << 5) |
+            rt.id);
+    }
+
+    // ==========================================
     // STR (Store Register)
     // ==========================================
 
@@ -418,6 +463,10 @@ struct Assembler {
         // Encoding: 1101 0110 0001 1111 0000 0000 0000 Rn
         enforce(rn.size == RegSize.X, "BLR requires an X register");
         emit(0xD63F0000 | (rn.id << 5));
+    }
+
+    private void requireW(Register rt, string op) {
+        enforce(rt.size == RegSize.W, op ~ " requires a W register destination");
     }
 
     private void emitCondBranch(Condition cond, int targetOffset) {
