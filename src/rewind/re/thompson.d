@@ -523,9 +523,12 @@ unittest {
     BytecodeBuilder builder;
     with (builder) with(Opcode) {
         code(CHAR, 'a');
+        code(CHAR, 'b');
+        code(CHAR, 'c');
         code(END, 1);
     }
     auto native = toVM(builder, true);
     assert(native.run("abc", null));
     assert(!native.run("bc", null));
+    assert(!native.run("abd", null));
 }
