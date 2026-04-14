@@ -506,6 +506,10 @@ void* compileNativeCode(uint[] code) {
             bind(skipOver);
                 dispatch();
                 break;
+            case FORK:
+                fork(SCRATCH_2, codeLabels[(i+val) & 0XFF_FFFF], true);
+                pushList(SCRATCH_2, CLIST_HEAD, CLIST_TAIL);
+                break;
             case END:
                 mov(x(0), CURRENT);
                 ret();
@@ -531,4 +535,20 @@ unittest {
     assert(native.run("abc", null));
     assert(!native.run("bc", null));
     assert(!native.run("abd", null));
+}
+
+unittest {
+    BytecodeBuilder builder;
+    with (builder) with(Opcode) {
+        size_t start = code(CHAR, 'a');
+        code(CHAR, 'b');
+        size_t forked = code(FORK, 0);
+        code(CHAR, 'c');
+        code(END, 1);
+        fixup(forked, cast(int)(start - forked));
+    }
+    auto native = toVM(builder, true);
+    assert(native.run("abc", null));
+    assert(native.run("ababc", null));
+    assert(!native.run("ab", null));
 }
