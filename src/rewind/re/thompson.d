@@ -67,7 +67,7 @@ bool thompson(uint[] code, bool search, ulong[] mergeTable, ref size_t genCounte
     auto input = slice;
     ThompsonThread* ret;
     if (nativeCode) {
-        auto nativeFn = cast(ThompsonThread* function(bool, void*, ulong*, ref size_t, int,  ref const(char)[] slice))nativeCode;
+        auto nativeFn = cast(ThompsonThread* function(bool, void*, ulong*, ref size_t, int,  ref const(char)[] slice)) nativeCode;
         ret = nativeFn(search, stack, mergeTable.ptr, genCounter, marks, slice);
     } else {
         ret = thompsonVM(code.ptr, search, stack, mergeTable.ptr, genCounter, marks, slice);
@@ -367,10 +367,104 @@ unittest {
 
 void* compileNativeCode(uint[] code) {
     import rewind.re.dynasm.arm64;
+    import std.conv;
+    enum {
+        SEARCH = x(0),
+        STACK = x(1),
+        MERGE_TABLE = x(2),
+        REF_GENCOUNTER = x(3),
+        MARKS = x(4),
+        SLICE = x(5),
+        CURRENT = x(6),
+        CLIST_HEAD = x(7),
+        CLIST_TAIL = x(8),
+        NLIST_HEAD = x(9),
+        NLIST_TAIL = x(10),
+        FREELIST = x(11),
+        CHAR = x(12),
+        SCRATCH = x(13),
+        GEN_COUNTER = x(14),
+        INPUT = x(15),
+        INPUT_END = x(16),
+        SCRATCH_2 = x(17),
+        ZERO = x(31)
+    }
     Assembler assembler = Assembler(64 * 1024);
-    with(assembler){
-        mov(x(0), imm(0));
-        ret();
+    Label[] codeLabels = new Label[code.length];
+    for (size_t i = 0; i < codeLabels.length; i++) {
+        codeLabels[i] = assembler.createLabel();
+    }
+    with(assembler) with (Condition) {
+        mov(CLIST_HEAD, imm(0));
+        mov(CLIST_TAIL, imm(0));
+        mov(NLIST_HEAD, imm(0));
+        mov(NLIST_TAIL, imm(0));
+        mov(FREELIST, imm(0));
+        void fork(Register reg, ref Label lbl, bool marks) {
+            auto end = createLabel();
+            auto stack = createLabel();
+            cmp(FREELIST, imm(0));
+            b(EQ, stack);
+            mov(reg, FREELIST);
+            ldr(FREELIST, mem(FREELIST));
+            b(end);
+        bind(stack);
+            mov(reg, STACK);
+            mov(SCRATCH, imm(cast(uint)ThompsonThread.sizeOf(0)));
+            add(STACK, STACK, SCRATCH); 
+        bind(end);
+            adr(SCRATCH, lbl);
+            str(ZERO, mem(reg)); // next pointer
+            str(SCRATCH, mem(reg, 8)); // set pc to the target label
+            // TODO: compute size of marks and copy/zero out
+        }
+        void pushList(Register reg, Register head, Register tail) {
+            auto append = createLabel();
+            auto end = createLabel();
+            cmp(head, ZERO);
+            b(NE, append);
+            mov(head, reg);
+            b(end);
+        bind(append);
+            str(reg, mem(tail)); // tail.next = reg
+        bind(end);
+            mov(tail, reg);
+        }
+        void popList(Register reg, Register head, Register tail) {
+            auto last = createLabel();
+            auto loaded = createLabel();
+            auto end = createLabel();
+            mov(reg, head);
+            cmp(head, tail);
+            b(EQ, last);
+            ldr(head, mem(head)); // head = head.next
+            b(loaded);
+        bind(last);
+            mov(head, ZERO);
+            mov(tail, ZERO);
+        bind(loaded);
+            cmp(reg, ZERO);
+            b(EQ, end);
+            str(ZERO, mem(reg)); // nulify next pointer for reg
+        bind(end);
+        }
+        fork(CURRENT, codeLabels[0], false);
+        ldr(SCRATCH, mem(CURRENT, 8));
+        br(SCRATCH);
+        for (size_t i = 0; i < code.length; i++) {
+            bind(codeLabels[i]);
+            auto op = (code[i] >> 24) & 0x7f;
+            auto val = code[i] & 0xFF_FFFF;
+            switch (op) with (Opcode)  {
+            case CHAR:
+            case END:
+                mov(x(0), CURRENT);
+                ret();
+                break;
+            default:
+                assert(false, "Not supprted opcode "~to!string(op));
+            }
+        }
     }
     assembler.finalize();
     return assembler.data.ptr;
@@ -382,5 +476,5 @@ unittest {
         code(END, 1);
     }
     auto native = toVM(builder, true);
-    assert(!native.run("abc", null));
+    assert(native.run("abc", null));
 }
