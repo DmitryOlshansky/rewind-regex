@@ -465,6 +465,10 @@ void* compileNativeCode(uint[] code) {
             mov(CUR_CHAR, imm(-1));
         bind(end);
         }
+        void terminate() {
+            str(FREELIST, mem(CURRENT)); // current.next = freelist
+            mov(FREELIST, CURRENT);
+        }
         void dispatch() {
             popList(CURRENT, CLIST_HEAD, CLIST_TAIL);
             cmp(CURRENT, ZERO);
@@ -496,13 +500,17 @@ void* compileNativeCode(uint[] code) {
             auto val = code[i] & 0xFF_FFFF;
             switch (op) with (Opcode)  {
             case CHAR:
+                auto noMatch = createLabel();
                 auto skipOver = createLabel();
                 mov(SCRATCH, imm(val)); // TODO: extend mov to handle large immediates
                 cmp(CUR_CHAR, SCRATCH);
-                b(NE, skipOver);
+                b(NE, noMatch);
                 adr(SCRATCH, codeLabels[i+1]);
                 str(SCRATCH, mem(CURRENT, 8));
                 pushList(CURRENT, NLIST_HEAD, NLIST_TAIL);
+                b(skipOver);
+            bind(noMatch);
+                terminate();
             bind(skipOver);
                 dispatch();
                 break;
@@ -549,6 +557,12 @@ unittest {
     }
     auto native = toVM(builder, true);
     assert(native.run("abc", null));
-    assert(native.run("ababababababc", null));
+    assert(native.run(
+        "ababababababababababababababababababababababababababababababababababababababababababababababab" ~
+        "ababababababababababababababababababababababababababababababababababababababababababababababab" ~
+        "ababababababababababababababababababababababababababababababababababababababababababababababab" ~
+        "ababababababababababababababababababababababababababababababababababababababababababababababab" ~ 
+        "ababababababababababababababababababababababababababababababababababababababababababababababab" ~
+        "ababababababababababababababababababababababababababababababababababababababababababababababc", null));
     assert(!native.run("ab", null));
 }
