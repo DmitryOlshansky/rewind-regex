@@ -549,6 +549,6 @@ unittest {
     }
     auto native = toVM(builder, true);
     assert(native.run("abc", null));
-    assert(native.run("ababc", null));
+    assert(native.run("ababababababc", null));
     assert(!native.run("ab", null));
 }
