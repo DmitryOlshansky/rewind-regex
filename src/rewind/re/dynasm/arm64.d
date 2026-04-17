@@ -208,6 +208,22 @@ struct Assembler {
         emit((sf << 31) | 0x0B000000 | (rm.id << 16) | (rn.id << 5) | rd.id);
     }
 
+    /// ADD - With immediate
+    void add(Register rd, Register rn, Immediate imm) {
+        enforce(rd.size == RegSize.X, "this add-immediate is for X regs");
+        enforce(imm.value <= 0xFFF, "imm12 out of range");
+
+        uint sf    = 1;
+        uint sh    = 0;          
+        uint imm12 = imm.value;  
+
+        // Encoding: sf(31) | op(30)=0 | S(29)=0 | 100010 (28..23)
+        //           | sh(22) | imm12(21..10) | Rn(9..5) | Rd(4..0)
+        uint instr = (sf << 31) | 0x11000000 | (sh << 22) |
+                    (imm12 << 10) | (rn.id << 5) | rd.id;
+        emit(instr);
+    }
+
     /// B - Unconditional Branch
     void b(ref Label lbl) {
         if (lbl.offset == -1) {

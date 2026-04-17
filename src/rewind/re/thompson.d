@@ -477,6 +477,7 @@ void* compileNativeCode(uint[] code) {
             br(SCRATCH);
         }
         readChar();
+        add(GEN_COUNTER, GEN_COUNTER, imm(1));
         fork(CURRENT, codeLabels[0], false);
         ldr(SCRATCH, mem(CURRENT, 8));
         br(SCRATCH);
@@ -492,12 +493,16 @@ void* compileNativeCode(uint[] code) {
         ret();
     bind(nextStepCont);
         readChar();
+        add(GEN_COUNTER, GEN_COUNTER, imm(1));
         ldr(SCRATCH, mem(CURRENT, 8));
         br(SCRATCH);
         for (size_t i = 0; i < code.length; i++) {
         bind(codeLabels[i]);
             auto op = (code[i] >> 24) & 0x7f;
             auto val = code[i] & 0xFF_FFFF;
+            if (code[i] & (1<<31)) { // MERGE_POINT
+                
+            }
             switch (op) with (Opcode)  {
             case CHAR:
                 auto noMatch = createLabel();
@@ -565,4 +570,29 @@ unittest {
         "ababababababababababababababababababababababababababababababababababababababababababababababab" ~
         "ababababababababababababababababababababababababababababababababababababababababababababababc", null));
     assert(!native.run("ab", null));
+}
+
+void main() {
+    import std.datetime.stopwatch, std.stdio;
+    BytecodeBuilder builder;
+    with (builder) with(Opcode) {
+        size_t start = code(CHAR, 'a');
+        code(CHAR, 'b');
+        size_t forked = code(FORK, 0);
+        code(CHAR, 'c');
+        code(END, 1);
+        fixup(forked, cast(int)(start - forked));
+    }
+    auto interpretted = builder.toVM(false);
+    auto native = builder.toVM(true);
+    enum haystack = "abababababababababc";
+    bool testInterpretted() {
+        return interpretted.run(haystack, null);
+    }
+    bool testNative() {
+        return native.run(haystack, null);
+    }
+    auto timings = benchmark!(() { return testInterpretted(); }, (){ return testNative(); })(1_000_000);
+    writeln("Interpretted ", timings[0]);
+    writeln("Native ", timings[1]);
 }

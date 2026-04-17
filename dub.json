@@ -6,6 +6,7 @@
 	"dependencies": {
 		"pry": "0.7.0"
 	},
+	"targetType": "executable",
 	"description": "REwind Regex. Radical and brutal twin of std.regex library",
 	"copyright": "Copyright © 2018, Dmitry Olshansky",
 	"license": "Boost"
