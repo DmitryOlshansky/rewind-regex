@@ -2,10 +2,24 @@ module rewind.re.ast;
 
 import std.array, std.format, std.conv, std.uni, std.algorithm;
 
+import rewind.re.bytecode;
+
 abstract class Ast {
     static int counter = 0;
+    void accept(Visitor visitor);
     string toDot();
     string repr();
+}
+
+interface Visitor {
+    void visit(Pattern p);
+    void visit(Group g);
+    void visit(Alt a);
+    void visit(Seq s);
+    void visit(Rep rep);
+    void visit(Char c);
+    void visit(CharClass cc);
+    void visit(Dot dot);
 }
 
 class Pattern : Ast {
@@ -13,6 +27,10 @@ class Pattern : Ast {
     
     this(Ast[] children) {
         this.children = children;
+    }
+
+    override void accept(Visitor visitor) {
+        visitor.visit(this);
     }
 
     override string toDot() {
@@ -32,11 +50,13 @@ class Pattern : Ast {
 
 class Group : Ast {
     Ast inner;
-    int number;
 
-    this(Ast inner, int number) {
+    this(Ast inner) {
         this.inner = inner;
-        this.number = number;
+    }
+
+    override void accept(Visitor visitor) {
+        visitor.visit(this);
     }
 
     override string toDot() {
@@ -53,6 +73,10 @@ class Seq : Ast {
 
     this(Ast[] seq) {
         this.seq = seq;
+    }
+
+    override void accept(Visitor visitor) {
+        visitor.visit(this);
     }
 
     override string toDot() {
@@ -77,6 +101,11 @@ class Alt : Ast {
     this(Ast[] alts) {
         this.alts = alts;
     }
+
+    override void accept(Visitor visitor) {
+        visitor.visit(this);
+    }
+
 
     override string toDot() {
         auto self = counter;
@@ -104,6 +133,10 @@ class Rep : Ast {
         this.max = max;
     }
 
+    override void accept(Visitor visitor) {
+        visitor.visit(this);
+    }
+
     override string toDot() {
         return format("f%d [label=\"%s\"]\n", counter++, repr());
     }
@@ -119,6 +152,10 @@ class Char : Ast {
     this(dchar ch) {
         this.ch = ch;
     }
+    
+    override void accept(Visitor visitor) {
+        visitor.visit(this);
+    }
 
     override string toDot() {
         return format("f%d [label=\"%c\"]\n", counter++, ch);
@@ -131,6 +168,10 @@ class Char : Ast {
 
 class Dot : Ast {
     this() {}
+
+    override void accept(Visitor visitor) {
+        visitor.visit(this);
+    }
 
     override string toDot() {
         return format("f%d [label=\".\"]\n", counter++);
@@ -148,6 +189,10 @@ class CharClass : Ast {
         this.chars = chars;
     }
 
+    override void accept(Visitor visitor) {
+        visitor.visit(this);
+    }
+
     override string toDot() {
         return format("f%d [label=\"%s\"]", counter++, repr());
     }
@@ -156,4 +201,3 @@ class CharClass : Ast {
         return chars.byInterval.map!(pair => pair.a.to!string ~ "-" ~ pair.b.to!string).join("");
     }
 }
-

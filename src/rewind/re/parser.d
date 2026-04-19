@@ -6,7 +6,6 @@ import rewind.re.ast;
 
 private alias Stream = SimpleStream!(const(char)[]);
 private alias env = parsers!Stream;
-int counter = 1;
 env.DynamicParser!Ast parser;
 
 class ParseException : Exception {
@@ -40,7 +39,7 @@ static this() {
             seq(tk!'u', set(hex).rep!(4,4)).map!(x => cast(dchar)to!int(x[1], 16))
         )).map!(x => x[1]);
         auto atom = any(
-            seq(tk!'(', expr, tk!')').map!(x => cast(Ast)new Group(x[1], counter++)),
+            seq(tk!'(', expr, tk!')').map!(x => cast(Ast)new Group(x[1])),
             escapes.map!(x => cast(Ast) new Char(x)),
             tk!'.'.map!(x => cast(Ast) new Dot()),
             set(allowedChars).map!(x => cast(Ast) new Char(x))
