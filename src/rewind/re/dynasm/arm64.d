@@ -1,5 +1,7 @@
 module rewind.re.dynasm.arm64;
 
+version(Posix):
+
 import core.sys.posix.sys.mman : mmap, munmap, mprotect, PROT_READ, PROT_WRITE, PROT_EXEC, MAP_PRIVATE, MAP_ANON, MAP_FAILED;
 import std.exception : enforce;
 import std.stdio : writeln;

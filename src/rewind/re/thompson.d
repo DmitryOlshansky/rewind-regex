@@ -364,6 +364,7 @@ unittest {
     assert(cap[1] == "bAZ09");
 }
 
+version(linux) {
 
 void* compileNativeCode(uint[] code) {
     import rewind.re.dynasm.arm64;
@@ -536,6 +537,12 @@ void* compileNativeCode(uint[] code) {
     return assembler.data.ptr;
 }
 
+} else {
+    void* compileNativeCode(uint[] code) {
+        return null;
+    }
+}
+
 unittest {
     BytecodeBuilder builder;
     with (builder) with(Opcode) {
@@ -571,6 +578,7 @@ unittest {
         "ababababababababababababababababababababababababababababababababababababababababababababababc", null));
     assert(!native.run("ab", null));
 }
+
 
 void main() {
     import std.datetime.stopwatch, std.stdio;
