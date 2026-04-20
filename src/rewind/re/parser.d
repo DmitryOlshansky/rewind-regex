@@ -21,7 +21,7 @@ static this() {
         }
         return set;
     }
-    auto allowedChars =	addChars(unicode.Cc, "{}()\\.?*+").inverted;
+    auto allowedChars =	addChars(unicode.Cc, "{}()\\.?*+|").inverted;
     auto digits = CodepointSet('0', '9'+1);
     auto hex = CodepointSet('0', '9'+1, 'a', 'f'+1, 'A', 'F'+1);
     with(env) {
@@ -54,7 +54,9 @@ static this() {
             ).optional
         ).map!(x => x[1].isNull ? x[0] : cast(Ast)new Rep(x[0], x[1][0], x[1][1]));
         expr = delimited(quantified.array.map!(x => cast(Ast)new Seq(x)), tk!'|').map!(x => cast(Ast)new Alt(x));
-        parser = expr;
+        auto p = dynamic!Ast();
+        p = expr.map!(x => cast(Ast)new Pattern([x]));
+        parser = p;
     }
 }
 
@@ -62,7 +64,6 @@ Ast parse(const(char)[] pattern) {
     Stream.Error err;
     Ast v;
     auto stream = stream(pattern);
-    counter = 1;
     if (!parser.parse(stream, v, err) || !stream.empty) {
         auto s = "Regex pattern failed to parse '"~err.reason~"': `"~pattern[0..err.location]~" <<HERE>> "~pattern[err.location..$];
         throw new ParseException(s.idup);

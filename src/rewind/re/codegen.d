@@ -1,5 +1,7 @@
 module rewind.re.codegen;
 
+import std.exception;
+
 import rewind.re.impl.stack;
 
 import rewind.re.bytecode, rewind.re.ast;
@@ -7,12 +9,12 @@ import rewind.re.bytecode, rewind.re.ast;
 struct Program {
     uint[] forward, backward;
     int groups;
-    int mergePoints;
+    size_t mergePoints;
 }
 
-auto compile(Pattern pattern) {
-    auto fwd = Codegen(true);
-    auto bwd = Codegen(false);
+auto compile(Ast pattern) {
+    scope fwd = new Codegen(true);
+    scope bwd = new Codegen(false);
     pattern.accept(fwd);
     pattern.accept(bwd);
     return Program(fwd.code, bwd.code, fwd.groupCounter, fwd.mergePoints);
@@ -22,26 +24,30 @@ class Codegen : Visitor {
 private:
     bool forward;
     int groupCounter;
-    int mergePoints;
+    size_t mergePoints;
     BytecodeBuilder builder;
     uint[] code;
 public:
     this(bool forward) {
-        this.forward = true;
+        this.forward = forward;
         this.builder = BytecodeBuilder(256);
+    }
+
+    void visitAll(T)(T[] members) {
+        if (forward) {
+            foreach (a; members) {
+                a.accept(this);
+            }
+        } else {
+            foreach_reverse (a; members) {
+                a.accept(this);
+            }
+        }
     }
 
     void visit(Pattern p) {
         builder.code(Opcode.MARK, 0); // full match is group #0
-        if (forward) {
-            foreach (a; p.children) {
-                a.accept(this);
-            }
-        } else {
-            foreach_reverse (a; p.children) {
-                a.accept(this);
-            }
-        }
+        visitAll(p.children);
         builder.code(Opcode.MARK, 1);
         builder.code(Opcode.END, 1);
         code = builder.build();
@@ -51,20 +57,12 @@ public:
     void visit(Group g) {
         int gn = ++groupCounter;
         builder.code(Opcode.MARK, gn*2);
-        if (forward) {
-            foreach (a; g.inner){
-                a.accept(this);
-            }
-        } else {
-            foreach_reverse (a; g.inner) {
-                a.accept(this);
-            }
-        }
+        g.inner.accept(this);
         builder.code(Opcode.MARK, gn*2+1);
     }
 
     void visit(Alt alt) {
-        int[] finals;
+        size_t[] finals;
         void processAlt(Ast a, bool last) {
             if (!last) {
                 size_t start = builder.code(Opcode.FORK, 0);
@@ -76,14 +74,9 @@ public:
                 a.accept(this);
             }
         }
-        if (forward) {
-            foreach(i, a; alt.alts) {
-                processAlt(a, i == alt.alts.length-1);
-            }
-        } else {
-            foreach_reverse(i, a; alt.alts) {
-                processAlt(a, i == alt.alts.length-1);
-            }   
+        // order of alternatives is the same forward or backward
+        foreach(i, a; alt.alts) {
+            processAlt(a, i == alt.alts.length-1);
         }
         foreach (target; finals) {
             builder.fixup(target, cast(int)(builder.offset - target));
@@ -91,21 +84,59 @@ public:
     }
 
     void visit(Rep rep) {
-        if (rep.min == 0) {
-            size_t start = builder.code(Opcode.JMP, 0);
+        enforce(rep.max != 0, "regex repetition maximum cannot be 0");
+        if (rep.max != -1) {
+            enforce(rep.min <= rep.max, "regex repetition maximum cannot be smaller then minimum");
+        }
+        if (rep.max != -1) {
+            // simply unroll the first rep.min times
+            foreach (i; 0..rep.min) {
+                rep.ast.accept(this);
+            }
+            // FORK ===> stepOver1
+            // [code x 1]
+            // stepOver1:
+            // FORK ===> stepOver2
+            // [code x 2]
+            // stepOver2: 
+            // ...
+            // FORK ==> stepOver{rep.max}
+            // [code x rep.max]
+            // stepOver{rep.max}: ... <to be generated>
+            foreach (i; rep.min..rep.max+1) {
+                size_t start = builder.code(Opcode.FORK, 0);
+                rep.ast.accept(this);
+                builder.fixup(start, cast(int)(builder.offset - start));
+            }
+        } else {
+            if (rep.min > 0) { //{x, }
+                // [code x 1] 
+                //  ...
+                // offset: [code x rep.min]
+                // FORK ===> offset
+                size_t offset = 0;
+                foreach (i; 0..rep.min) {
+                    offset = builder.offset;
+                    rep.ast.accept(this);
+                }
+                size_t jumpBack = builder.code(Opcode.FORK, 0);
+                builder.fixup(jumpBack, cast(int)(jumpBack - offset));
+            } else { // {0, }
+                // jumpFwd: JMP ==> jumpBwd
+                // blockStart: [code]
+                // jumpBwd: FORK ==> blockStart
+                size_t jumpFwd = builder.code(Opcode.JMP, 0);
+                size_t blockStart = builder.offset;
+                rep.ast.accept(this);
+                size_t jumpBack = builder.code(Opcode.FORK, 0);
+                builder.fixup(jumpFwd, cast(int)(jumpBack - jumpFwd));
+                builder.fixup(jumpBack, cast(int)(jumpBack - blockStart));
+            }
         }
     }
 
     void visit(Seq seq) {
-        if (forward) {
-            foreach(a; seq.seq) {
-                a.accept(this);
-            }
-        } else {
-            foreach_reverse(a; seq.seq) {
-                a.accept(this);
-            }
-        }
+        visitAll(seq.seq);
     }
 
     void visit(Dot d) {
@@ -117,6 +148,79 @@ public:
     }
 
     void visit(CharClass cc) {
-        builder.code(cc);
+        builder.code(cc.chars);
+    }
+}
+
+version(unittest)
+void testCompile(string pattern, void delegate(BytecodeBuilder, BytecodeBuilder) generator) {
+    import rewind.re.parser;
+    auto ast = parse(pattern);
+    auto prog = compile(ast);
+    auto fwd = BytecodeBuilder(128);
+    auto bwd = BytecodeBuilder(128);
+    generator(fwd, bwd);
+    void check(uint[] gen, uint[] manual, string type) {
+        if (gen != manual) {
+            import std.stdio;
+            writeln("Generated:");
+            writeln(decode(gen));
+            writeln("Manual:");
+            writeln(decode(manual));
+            assert(false, type~" compile error in "~pattern);    
+        }
+    }
+    auto fwdCode = fwd.build;
+    fwdCode.setMergePoints();
+    auto bwdCode = bwd.build;
+    bwdCode.setMergePoints();
+    check(prog.forward, fwdCode, "forward");
+    check(prog.backward, bwdCode, "backward");
+}
+
+unittest {
+    // simple sequence + group
+    testCompile("ab(c)", (fwd, bwd) {
+        with (fwd) with (Opcode) {
+            code(MARK, 0);
+            code(CHAR, 'a');
+            code(CHAR, 'b');
+            code(MARK, 2);
+            code(CHAR, 'c');
+            code(MARK, 3);
+            code(MARK, 1);
+            code(END, 1);
+        }
+        with(bwd) with (Opcode) {
+            code(MARK, 0);
+            code(MARK, 2);
+            code(CHAR, 'c');
+            code(MARK, 3);
+            code(CHAR, 'b');
+            code(CHAR, 'a');
+            code(MARK, 1);
+            code(END, 1);
+        }
+    });
+    version(none)
+    {
+        // simple alternatives
+        testCompile("(a|b)c", (fwd, bwd) {
+            with (fwd) with(Opcode) {
+                code(MARK, 0);
+                code(MARK, 2);
+                size_t start = code(FORK, 0);
+                code(CHAR, 'a');
+                size_t toEnd = code(JMP, 0);
+                size_t nextAlt = code(CHAR, 'b');
+                size_t end = code(MARK, 3);
+                code(CHAR, 'c');
+                fixup(start, cast(int)(nextAlt - start));
+                fixup(toEnd, cast(int)(end - toEnd));
+                code(MARK, 1);
+                code(END, 1);
+            }
+
+        });
     }
 }

@@ -56,8 +56,7 @@ struct BytecodeBuilder {
             foreach (dchar ch; set.byCodepoint) {
                 raw(ch);
             }
-        }
-        else if(inv.length < 4) {
+        } else if(inv.length < 4) {
             code(Opcode.NOT_ONE_OF, cast(int)inv.length);
             foreach (dchar ch; inv.byCodepoint) {
                 raw(ch);

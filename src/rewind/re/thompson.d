@@ -579,6 +579,8 @@ unittest {
     assert(!native.run("ab", null));
 }
 
+version(unittest) {}
+else {
 
 void main() {
     import std.datetime.stopwatch, std.stdio;
@@ -603,4 +605,6 @@ void main() {
     auto timings = benchmark!(() { return testInterpretted(); }, (){ return testNative(); })(1_000_000);
     writeln("Interpretted ", timings[0]);
     writeln("Native ", timings[1]);
+}
+
 }

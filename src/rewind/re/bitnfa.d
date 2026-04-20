@@ -9,7 +9,7 @@ ulong hash(ulong x) {
 }
 
 // aka simple immutable hash table
-// the idea is that it's build once and used many times for lookups
+// the idea is that it's built once and used many times for lookups
 struct SIHT {
     ulong[sihtSize] keys = -1;
     ulong[sihtSize] values = -1;
@@ -41,6 +41,10 @@ struct SIHT {
             idx = (idx + 1) % sihtSize;
         }
     }
+}
+
+unittest {
+
 }
 
 struct BitNFA {
