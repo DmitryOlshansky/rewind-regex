@@ -69,7 +69,7 @@ public:
                 a.accept(this);
                 size_t end = builder.code(Opcode.JMP, 0);
                 finals ~= end;
-                builder.fixup(start, cast(int)((end+1) - start));
+                builder.fixup(start, end+1);
             } else {
                 a.accept(this);
             }
@@ -79,7 +79,7 @@ public:
             processAlt(a, i == alt.alts.length-1);
         }
         foreach (target; finals) {
-            builder.fixup(target, cast(int)(builder.offset - target));
+            builder.fixup(target, builder.offset);
         }
     }
 
@@ -103,10 +103,10 @@ public:
             // FORK ==> stepOver{rep.max}
             // [code x rep.max]
             // stepOver{rep.max}: ... <to be generated>
-            foreach (i; rep.min..rep.max+1) {
+            foreach (i; rep.min..rep.max) {
                 size_t start = builder.code(Opcode.FORK, 0);
                 rep.ast.accept(this);
-                builder.fixup(start, cast(int)(builder.offset - start));
+                builder.fixup(start, builder.offset);
             }
         } else {
             if (rep.min > 0) { //{x, }
@@ -120,7 +120,7 @@ public:
                     rep.ast.accept(this);
                 }
                 size_t jumpBack = builder.code(Opcode.FORK, 0);
-                builder.fixup(jumpBack, cast(int)(jumpBack - offset));
+                builder.fixup(jumpBack, offset);
             } else { // {0, }
                 // jumpFwd: JMP ==> jumpBwd
                 // blockStart: [code]
@@ -129,8 +129,8 @@ public:
                 size_t blockStart = builder.offset;
                 rep.ast.accept(this);
                 size_t jumpBack = builder.code(Opcode.FORK, 0);
-                builder.fixup(jumpFwd, cast(int)(jumpBack - jumpFwd));
-                builder.fixup(jumpBack, cast(int)(jumpBack - blockStart));
+                builder.fixup(jumpFwd, jumpBack);
+                builder.fixup(jumpBack, blockStart);
             }
         }
     }
@@ -178,6 +178,14 @@ void testCompile(string pattern, void delegate(BytecodeBuilder, BytecodeBuilder)
     check(prog.backward, bwdCode, "backward");
 }
 
+version(unittest)
+void testCompileSym(string pattern, void delegate(BytecodeBuilder) generator) {
+    testCompile(pattern, (fwd, bwd) {
+        generator(fwd);
+        generator(bwd);
+    });
+}
+
 unittest {
     // simple sequence + group
     testCompile("ab(c)", (fwd, bwd) {
@@ -202,25 +210,120 @@ unittest {
             code(END, 1);
         }
     });
-    version(none)
-    {
-        // simple alternatives
-        testCompile("(a|b)c", (fwd, bwd) {
-            with (fwd) with(Opcode) {
-                code(MARK, 0);
-                code(MARK, 2);
-                size_t start = code(FORK, 0);
+    // simple alternatives
+    testCompile("(a|b)c", (fwd, bwd) {
+        with (fwd) with(Opcode) {
+            code(MARK, 0);
+            code(MARK, 2);
+            size_t start = code(FORK, 0);
+            code(CHAR, 'a');
+            size_t toEnd = code(JMP, 0);
+            size_t nextAlt = code(CHAR, 'b');
+            size_t end = code(MARK, 3);
+            code(CHAR, 'c');
+            fixup(start, nextAlt);
+            fixup(toEnd, end);
+            code(MARK, 1);
+            code(END, 1);
+        }
+        with(bwd) with (Opcode) {
+            code(MARK, 0);
+            code(CHAR, 'c');
+            code(MARK, 2);
+            size_t alt = code(FORK, 0);
+            code(CHAR, 'a');
+            size_t toEnd = code(JMP, 0);
+            size_t altTarget = code(CHAR, 'b');
+            size_t end = code(MARK, 3);
+            code(MARK, 1);
+            code(END, 1);
+            fixup(alt, altTarget);
+            fixup(toEnd, end);
+        }
+    });
+    // simple repetitions
+    testCompileSym("a*", (fwd) {
+        with (fwd) with(Opcode) {
+            code(MARK, 0);
+            size_t jumpToLoop = code(JMP, 0);
+            size_t loopEnd = code(CHAR, 'a');
+            size_t loopStart = code(FORK, 0);
+            code(MARK, 1);
+            code(END, 1);
+            fixup(loopStart, loopEnd);
+            fixup(jumpToLoop, loopStart);
+        }
+    });
+    testCompileSym("a+", (fwd) {
+        with (fwd) with(Opcode) {
+            code(MARK, 0);
+            size_t loopEnd = code(CHAR, 'a');
+            size_t loopStart = code(FORK, 0);
+            code(MARK, 1);
+            code(END, 1);
+            fixup(loopStart, loopEnd);
+        }
+    });
+    testCompileSym("a{3}", (fwd) {
+        with (fwd) with(Opcode) {
+            code(MARK, 0);
+            foreach (_; 0..3) {
                 code(CHAR, 'a');
-                size_t toEnd = code(JMP, 0);
-                size_t nextAlt = code(CHAR, 'b');
-                size_t end = code(MARK, 3);
-                code(CHAR, 'c');
-                fixup(start, cast(int)(nextAlt - start));
-                fixup(toEnd, cast(int)(end - toEnd));
-                code(MARK, 1);
-                code(END, 1);
             }
-
-        });
-    }
+            code(MARK, 1);
+            code(END, 1);
+        }
+    });
+    testCompileSym("a{0,3}", (fwd) {
+        with (fwd) with(Opcode) {
+            code(MARK, 0);
+            foreach (_; 0..3) {
+                size_t sideStep = code(FORK, 0);
+                code(CHAR, 'a');
+                fixup(sideStep, fwd.offset);
+            }
+            code(MARK, 1);
+            code(END, 1);
+        }
+    });
+    testCompileSym("a{1,3}", (fwd) {
+        with (fwd) with(Opcode) {
+            code(MARK, 0);
+            code(CHAR, 'a');
+            foreach (_; 0..2) {
+                size_t sideStep = code(FORK, 0);
+                code(CHAR, 'a');
+                fixup(sideStep, fwd.offset);
+            }
+            code(MARK, 1);
+            code(END, 1);
+        }
+    });
+    testCompileSym("a{3,}", (fwd) {
+        with (fwd) with(Opcode) {
+            code(MARK, 0);
+            code(CHAR, 'a');
+            code(CHAR, 'a');
+            size_t loopStart = code(CHAR, 'a');
+            size_t loop = code(FORK, 0);
+            fixup(loop, loopStart);
+            code(MARK, 1);
+            code(END, 1);
+        }
+    });
+    testCompileSym("(a{2,})+", (fwd) {
+        with (fwd) with(Opcode) {
+            code(MARK, 0);
+            size_t outerLoopStart = code(MARK, 2);
+            code(CHAR, 'a');
+            size_t loopStart = code(CHAR, 'a');
+            size_t loop = code(FORK, 0);
+            fixup(loop, loopStart);
+            code(MARK, 3);
+            size_t outerLoop = code(FORK, 0);
+            fixup(outerLoop, outerLoopStart);
+            code(MARK, 1);
+            code(END, 1);
+        }
+    });
 }

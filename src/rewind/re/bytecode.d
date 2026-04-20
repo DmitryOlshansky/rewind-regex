@@ -82,8 +82,8 @@ struct BytecodeBuilder {
         return ofs;
     }
 
-    void fixup(size_t idx, int value) {
-        app.data[idx] = (app.data[idx] & 0xFF00_0000) | (cast(uint)value & 0xFF_FFFF);
+    void fixup(size_t idx, size_t dest) {
+        app.data[idx] = (app.data[idx] & 0xFF00_0000) | ((dest - idx) & 0xFF_FFFF);
     }
 
     uint[] build() {
@@ -248,7 +248,7 @@ unittest {
         code(JMP, 2);
         code(CHAR, 'z');
         size_t forkStart = code(FORK, 0);
-        fixup(forkStart, cast(int)(forkDest - forkStart));
+        fixup(forkStart, forkDest);
         code(MARK, 42);
         code(END, 1);
     }

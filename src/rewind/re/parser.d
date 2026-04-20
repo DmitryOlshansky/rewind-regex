@@ -48,6 +48,8 @@ static this() {
             atom,
             any(
                 seq(tk!'{', num, tk!',', num, tk!'}').map!(x => tuple(x[1], x[3])),
+                seq(tk!'{', num, tk!',', tk!'}').map!(x => tuple(x[1], -1)),
+                seq(tk!'{', num, tk!'}').map!(x => tuple(x[1], x[1])),
                 tk!'*'.map!(x => tuple(0, -1)),
                 tk!'+'.map!(x => tuple(1, -1)),
                 tk!'?'.map!(x => tuple(0, 1)),

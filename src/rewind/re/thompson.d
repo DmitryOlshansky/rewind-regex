@@ -329,7 +329,7 @@ unittest {
         size_t fork = code(FORK, 0);
         code(CHAR, 'b');
         code(END, 1);
-        fixup(fork, cast(int)(ofs - fork));
+        fixup(fork, ofs);
     }
     auto vm = builder.toVM();
     assert(vm.run("abc", null));
@@ -348,8 +348,8 @@ unittest {
         size_t to_end = code(JMP, 0);
         size_t start = code(CodepointSet('a', 'z'+1, 'A', 'Z'+1, '0', '9'+1));
         size_t loop_back = code(FORK, 0);
-        fixup(to_end, cast(int)(loop_back - to_end));
-        fixup(loop_back, cast(int)(start - loop_back));
+        fixup(to_end, loop_back);
+        fixup(loop_back, start);
         code(MARK, 3);
         code(CodepointSet('a', 'a'+1, 'c', 'c'+1));
         code(MARK, 1);
@@ -565,7 +565,7 @@ unittest {
         size_t forked = code(FORK, 0);
         code(CHAR, 'c');
         code(END, 1);
-        fixup(forked, cast(int)(start - forked));
+        fixup(forked, start);
     }
     auto native = toVM(builder, true);
     assert(native.run("abc", null));
@@ -591,7 +591,7 @@ void main() {
         size_t forked = code(FORK, 0);
         code(CHAR, 'c');
         code(END, 1);
-        fixup(forked, cast(int)(start - forked));
+        fixup(forked, start);
     }
     auto interpretted = builder.toVM(false);
     auto native = builder.toVM(true);
