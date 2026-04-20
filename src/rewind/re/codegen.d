@@ -326,4 +326,29 @@ unittest {
             code(END, 1);
         }
     });
+    testCompile("(ab)+", (fwd, bwd) {
+        with (fwd) with(Opcode) {
+            code(MARK, 0);
+            size_t loopStart = code(MARK, 2);
+            code(CHAR, 'a');
+            code(CHAR, 'b');
+            code(MARK, 3);
+            size_t loop = code(FORK, 0);
+            fixup(loop, loopStart);
+            code(MARK, 1);
+            code(END, 1);
+        }
+
+        with (bwd) with(Opcode) {
+            code(MARK, 0);
+            size_t loopStart = code(MARK, 2);
+            code(CHAR, 'b');
+            code(CHAR, 'a');
+            code(MARK, 3);
+            size_t loop = code(FORK, 0);
+            fixup(loop, loopStart);
+            code(MARK, 1);
+            code(END, 1);
+        }
+    });
 }
