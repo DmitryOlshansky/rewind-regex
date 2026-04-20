@@ -1,15 +1,20 @@
 module rewind.re.codegen;
 
-import std.exception;
+import std.exception, std.uni;
 
 import rewind.re.impl.stack;
 
 import rewind.re.bytecode, rewind.re.ast;
 
 struct Program {
-    uint[] forward, backward;
+    uint[] code;
+    CodepointSet[uint] chars;
     int groups;
     size_t mergePoints;
+}
+
+struct ProgramPair {
+    Program forward, backward;
 }
 
 auto compile(Ast pattern) {
@@ -17,7 +22,9 @@ auto compile(Ast pattern) {
     scope bwd = new Codegen(false);
     pattern.accept(fwd);
     pattern.accept(bwd);
-    return Program(fwd.code, bwd.code, fwd.groupCounter, fwd.mergePoints);
+    auto fwdProg = Program(fwd.code, fwd.chars, fwd.groupCounter, fwd.mergePoints);
+    auto bwdProg = Program(bwd.code, bwd.chars, fwd.groupCounter, fwd.mergePoints);
+    return ProgramPair(fwdProg, bwdProg);
 }
 
 class Codegen : Visitor {
@@ -25,6 +32,7 @@ private:
     bool forward;
     int groupCounter;
     size_t mergePoints;
+    CodepointSet[uint] chars;
     BytecodeBuilder builder;
     uint[] code;
 public:
@@ -140,14 +148,17 @@ public:
     }
 
     void visit(Dot d) {
+        chars[cast(uint)builder.offset] = unicode.any;
         builder.code(Opcode.ANY, 0);
     }
 
     void visit(Char c) {
+        chars[cast(uint)builder.offset] = CodepointSet(c.ch, c.ch+1);
         builder.code(Opcode.CHAR, c.ch);
     }
 
     void visit(CharClass cc) {
+        chars[cast(uint)builder.offset] = cc.chars;
         builder.code(cc.chars);
     }
 }
@@ -174,8 +185,8 @@ void testCompile(string pattern, void delegate(BytecodeBuilder, BytecodeBuilder)
     fwdCode.setMergePoints();
     auto bwdCode = bwd.build;
     bwdCode.setMergePoints();
-    check(prog.forward, fwdCode, "forward");
-    check(prog.backward, bwdCode, "backward");
+    check(prog.forward.code, fwdCode, "forward");
+    check(prog.backward.code, bwdCode, "backward");
 }
 
 version(unittest)
@@ -382,4 +393,75 @@ unittest {
             code(END, 1);
         }
     });
+}
+
+
+
+// this produces bytecode without MARK and later anchors such as start of the line / end of the line
+Program stripZeroWidth(Program prog) {
+    uint[] code = prog.code;
+    size_t[] translation = new size_t[code.length]; // map for before --> after offsets
+    uint[] stripped = new uint[code.length];
+    size_t target = 0;
+    foreach (pc; 0..code.length) {
+        auto op = opcode(code[pc]);
+        translation[pc] = target;
+        if (op != Opcode.MARK) {
+            stripped[target++] = code[pc];
+        }
+    }
+    foreach (pc; 0..code.length) {
+        auto op = opcode(code[pc]);
+        if (op == Opcode.JMP || op == Opcode.FORK) {
+            auto arg = argument(code[pc]);
+            auto dest = (pc + arg) & 0xFF_FFFF;
+            stripped[translation[pc]] = ((op << 24) | (translation[dest] - translation[pc]) & 0XFF_FFFF);
+        }
+    }
+    setMergePoints(stripped);
+    CodepointSet[uint] chars;
+    foreach( k,v; prog.chars) {
+        chars[cast(uint)translation[k]] = v;
+    }
+    return Program(stripped[0..target], chars, prog.groups, prog.mergePoints);
+}
+
+unittest {
+    auto builder = BytecodeBuilder(128);
+    with (builder) with (Opcode) {
+        code(MARK, 1);
+        size_t start = code(FORK, 0);
+        code(MARK, 2);
+        code(CHAR, 'a');
+        size_t end = code(MARK, 3);
+        code(CHAR, 'b');
+        size_t jmp = code(JMP, 0);
+        fixup(start, end);
+        fixup(jmp, start);
+        code(END, 1);
+    }
+    auto fullCode = builder.build();
+    Program full;
+    full.groups = 1;
+    full.code = fullCode;
+    full.mergePoints = setMergePoints(full.code);
+    full.chars[3] = CodepointSet('a', 'a'+1);
+    full.chars[5] = CodepointSet('b', 'b'+1);
+    
+    auto stripped = stripZeroWidth(full);
+    auto strippedBuilder = BytecodeBuilder(128);
+    with (strippedBuilder) with(Opcode) {
+        size_t start = code(FORK, 0);
+        code(CHAR, 'a');
+        size_t end = code(CHAR, 'b');
+        size_t jmp = code(JMP, 0);
+        fixup(start, end);
+        fixup(jmp, start);
+        code(END, 1);
+    }
+    auto expected = strippedBuilder.build();
+    setMergePoints(expected);
+    assert(stripped.code[] == expected[]);
+    assert(stripped.chars[1] == CodepointSet('a', 'a'+1));
+    assert(stripped.chars[2] == CodepointSet('b', 'b'+1));
 }
