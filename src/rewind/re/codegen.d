@@ -241,6 +241,37 @@ unittest {
             fixup(toEnd, end);
         }
     });
+    testCompileSym("a|b|c", (fwd) {
+        with (fwd) with(Opcode) {
+            code(MARK, 0);
+            size_t start = code(FORK, 0);
+            code(CHAR, 'a');
+            size_t toEnd = code(JMP, 0);
+            size_t nextAlt = code(FORK, 0);
+            code(CHAR, 'b');
+            size_t toEnd2 = code(JMP, 0);
+            size_t lastAlt = code(CHAR, 'c');
+            size_t end = code(MARK, 1);
+            fixup(start, nextAlt);
+            fixup(nextAlt, lastAlt);
+            fixup(toEnd, end);
+            fixup(toEnd2, end);
+            code(END, 1);
+        }
+    });
+    // TODO: to be optimized - empty alternatives
+    testCompileSym("a|", (fwd) {
+        with (fwd) with(Opcode) {
+            code(MARK, 0);
+            size_t start = code(FORK, 0);
+            code(CHAR, 'a');
+            size_t end = code(JMP, 0);
+            size_t endOfAlt = code(MARK, 1);
+            code(END, 1);
+            fixup(start, endOfAlt);
+            fixup(end, endOfAlt);
+        }
+    });
     // simple repetitions
     testCompileSym("a*", (fwd) {
         with (fwd) with(Opcode) {

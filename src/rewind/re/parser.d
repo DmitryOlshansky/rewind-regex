@@ -55,7 +55,7 @@ static this() {
                 tk!'?'.map!(x => tuple(0, 1)),
             ).optional
         ).map!(x => x[1].isNull ? x[0] : cast(Ast)new Rep(x[0], x[1][0], x[1][1]));
-        expr = delimited(quantified.array.map!(x => cast(Ast)new Seq(x)), tk!'|').map!(x => cast(Ast)new Alt(x));
+        expr = delimited(quantified.array!0.map!(x => cast(Ast)new Seq(x)), tk!'|').map!(x => cast(Ast)new Alt(x));
         auto p = dynamic!Ast();
         p = expr.map!(x => cast(Ast)new Pattern([x]));
         parser = p;
