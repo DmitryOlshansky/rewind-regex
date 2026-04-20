@@ -24,9 +24,14 @@ enum Opcode : ubyte {
     MERGE_POINT = 0x80
 }
 
+auto opcode(uint value) => (value >> 24) & 0x7F;
+auto argument(uint value) => value & 0xFF_FFFF;
+auto isMergePoint(uint value) => (value & (1<<31)) != 0;
+
 struct BytecodeBuilder {
     Appender!(uint[]) app;
     this(int capacity) {
+
         app = appender!(uint[])();
         app.reserve(capacity);
     }
@@ -98,8 +103,8 @@ size_t setMergePoints(uint[] code) {
     size_t mergePoints = 0;
 L_outer:
     while (pc < code.length) {
-        auto op = (code[pc] >> 24) & 0x7F;
-        auto val = code[pc] & 0xFF_FFFF;
+        auto op = opcode(code[pc]);
+        auto val = argument(code[pc]);
         while (passes[pc] == true) { // execution passes more then once
             mergePoints++;
             code[pc] |= (1<<31);
@@ -154,9 +159,9 @@ string decode(uint[] code) pure {
         return isGraphical(cast(dchar)value) ? "'"~(cast(dchar)value).to!string~"'" : format("0x%x", value);
     }
     while (pc < code.length) {
-        auto op = (code[pc] >> 24) & 0x7F;
-        auto mergePoint = code[pc] & (1<<31);
-        auto val = code[pc] & 0xFF_FFFF;
+        auto op = opcode(code[pc]);
+        auto mergePoint = isMergePoint(code[pc]);
+        auto val = argument(code[pc]);
         formattedWrite(app, "%d\t", pc);
         switch(op) with(Opcode) {
             case ANY:
@@ -256,4 +261,60 @@ unittest {
     size_t mergePoints = code.setMergePoints();
     assert(mergePoints == 1);
     assert(decode(code) == result);
+}
+
+// this produces bytecode without MARK and later anchors such as start of the line / end of the line
+uint[] stripZeroWidth(uint[] code) {
+    size_t[] translation = new size_t[code.length]; // map for before --> after offsets
+    uint[] stripped = new uint[code.length];
+    size_t target = 0;
+    foreach (pc; 0..code.length) {
+        auto op = opcode(code[pc]);
+        translation[pc] = target;
+        if (op != Opcode.MARK) {
+            stripped[target++] = code[pc];
+        }
+    }
+    foreach (pc; 0..code.length) {
+        auto op = opcode(code[pc]);
+        if (op == Opcode.JMP || op == Opcode.FORK) {
+            auto arg = argument(code[pc]);
+            auto dest = (pc + arg) & 0xFF_FFFF;
+            stripped[translation[pc]] = ((op << 24) | (translation[dest] - translation[pc]) & 0XFF_FFFF);
+        }
+    }
+    setMergePoints(stripped);
+    return stripped[0..target];
+}
+
+unittest {
+    auto builder = BytecodeBuilder(128);
+    with (builder) with (Opcode) {
+        code(MARK, 1);
+        size_t start = code(FORK, 0);
+        code(MARK, 2);
+        code(CHAR, 'a');
+        size_t end = code(MARK, 3);
+        code(CHAR, 'b');
+        size_t jmp = code(JMP, 0);
+        fixup(start, end);
+        fixup(jmp, start);
+        code(END, 1);
+    }
+    auto full = builder.build();
+    setMergePoints(full);
+    auto stripped = stripZeroWidth(full);
+    auto strippedBuilder = BytecodeBuilder(128);
+    with (strippedBuilder) with(Opcode) {
+        size_t start = code(FORK, 0);
+        code(CHAR, 'a');
+        size_t end = code(CHAR, 'b');
+        size_t jmp = code(JMP, 0);
+        fixup(start, end);
+        fixup(jmp, start);
+        code(END, 1);
+    }
+    auto expected = strippedBuilder.build();
+    setMergePoints(expected);
+    assert(stripped[] == expected[]);
 }
