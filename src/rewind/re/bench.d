@@ -5,6 +5,14 @@ import rewind.re.bytecode, rewind.re.thompson, rewind.re.bitnfa, rewind.re.codeg
 version(unittest) {}
 else {
 
+ref scramble(ref immutable(char)[] slice) {
+    asm {
+        naked;
+        mov RAX, RDI;
+        ret;
+    }
+}
+
 void main() {
     import std.datetime.stopwatch, std.stdio;
     BytecodeBuilder builder;
@@ -21,14 +29,17 @@ void main() {
     auto bitNFA = buildBitNFA(stripped);
     auto interpretted = builder.toVM(false);
     auto native = builder.toVM(true);
-    enum haystack = "abababababababababc";
+    auto haystack = "abababababababababc";
     bool testInterpretted() {
+        scramble(haystack);
         return interpretted.run(haystack, null);
     }
     bool testNative() {
+        scramble(haystack);
         return native.run(haystack, null);
     }
     bool testBitNFA() {
+        scramble(haystack);
         return bitNFA.search(haystack) > 0;
     }
     auto timings = benchmark!(
@@ -36,7 +47,6 @@ void main() {
         () { return testNative(); },
         () { return testBitNFA(); }
     )(1_000_000);
-    writeln(testBitNFA());
     writeln("Interpretted ", timings[0]);
     writeln("Native ", timings[1]);
     writeln("BitNFA ", timings[2]);
