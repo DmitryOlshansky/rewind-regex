@@ -202,17 +202,17 @@ struct BitNFA {
         size_t len = slice.length;
         for (size_t idx = 0; idx < len; idx++) {
             state <<= 1;
-            import std.stdio;
+            /*import std.stdio;
             writefln("S %b", state);
-            writefln("J %b", jumpMask);
+            writefln("J %b", jumpMask);*/
             auto m = state | jumpMask;
-            
+            /*
             writefln("T %b", jumps[m]);
             writefln("M %b", table[ptr[idx]]);
-            
+            */
             state &= jumps[m];
             state |= table[ptr[idx]];
-            writefln("-----");
+            //writefln("-----");
             if ((finishMask & state) == 0) {
                 return idx;
             }

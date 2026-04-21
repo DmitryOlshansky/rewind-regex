@@ -578,33 +578,3 @@ unittest {
         "ababababababababababababababababababababababababababababababababababababababababababababababc", null));
     assert(!native.run("ab", null));
 }
-
-version(unittest) {}
-else {
-
-void main() {
-    import std.datetime.stopwatch, std.stdio;
-    BytecodeBuilder builder;
-    with (builder) with(Opcode) {
-        size_t start = code(CHAR, 'a');
-        code(CHAR, 'b');
-        size_t forked = code(FORK, 0);
-        code(CHAR, 'c');
-        code(END, 1);
-        fixup(forked, start);
-    }
-    auto interpretted = builder.toVM(false);
-    auto native = builder.toVM(true);
-    enum haystack = "abababababababababc";
-    bool testInterpretted() {
-        return interpretted.run(haystack, null);
-    }
-    bool testNative() {
-        return native.run(haystack, null);
-    }
-    auto timings = benchmark!(() { return testInterpretted(); }, (){ return testNative(); })(1_000_000);
-    writeln("Interpretted ", timings[0]);
-    writeln("Native ", timings[1]);
-}
-
-}
