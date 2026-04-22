@@ -364,7 +364,7 @@ unittest {
     assert(cap[1] == "bAZ09");
 }
 
-version(linux) {
+version(AArch64) {
 
 void* compileNativeCode(uint[] code) {
     import rewind.re.dynasm.arm64;

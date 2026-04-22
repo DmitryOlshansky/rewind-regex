@@ -36,7 +36,7 @@ struct BytecodeBuilder {
         app.reserve(capacity);
     }
 
-    size_t offset() {return app.length; }
+    size_t offset() {return app.data.length; }
 
     size_t code(Opcode op, int value) {
         app ~= (op << 24) | (cast(uint)value & 0xFF_FFFF); // negative values are clamped to 24 bits
