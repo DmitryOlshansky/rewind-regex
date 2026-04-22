@@ -6,6 +6,10 @@ import rewind.re.bytecode, rewind.re.thompson, rewind.re.bitnfa, rewind.re.codeg
 version(unittest) {}
 else {
 
+ref scramble(T)(T arg) {
+    scramble(arg);
+}
+
 ref scramble(T)(ref T arg) {
     version(X86_64) {
         asm {
@@ -22,7 +26,7 @@ ref scramble(T)(ref T arg) {
     }
 }
 
-void main() {
+void synthetic() {
     import std.datetime.stopwatch, std.stdio;
     BytecodeBuilder builder;
     with (builder) with(Opcode) {
@@ -67,17 +71,96 @@ void main() {
         return vectorShiftOr.search(haystack) > 0;
     }
     auto timings = benchmark!(
-        () { return testInterpretted(); },
-        () { return testNative(); },
-        () { return testBitNFA(); },
-        () { return testShiftOR(); },
-        () { return testVectorShiftOR(); }
-    )(10_000_000);
+        () { return scramble(testInterpretted()); },
+        () { return scramble(testNative()); },
+        () { return scramble(testBitNFA()); },
+        () { return scramble(testShiftOR()); },
+        () { return scramble(testVectorShiftOR()); }
+    )(1_000_000);
     writeln("Interpretted ", timings[0]);
     writeln("Native ", timings[1]);
     writeln("BitNFA ", timings[2]);
     writeln("Scalar Shiftor ", timings[3]);
     writeln("Vector Shiftor ", timings[4]);
+}
+
+void realistic() {
+    import std.datetime.stopwatch, std.stdio;
+    BytecodeBuilder builder;
+    with (builder) with(Opcode) {
+        size_t start = code(CHAR, 'a');
+        size_t forked = code(FORK, 0);
+        code(CHAR, 'b');
+        code(END, 1);
+        fixup(forked, start);
+    }
+    auto fwd = compile(parse("a+b")).forward;
+    auto stripped = stripZeroWidth(fwd);
+    auto bitNFA = buildBitNFA(stripped);
+    auto interpretted = builder.toVM(false);
+    auto native = builder.toVM(true);
+    auto needle = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab";
+    auto shiftOr = buildShiftOr!ScalarBuilder(needle);
+    auto vectorShiftOr = buildShiftOr!SimdBuilder(needle);
+    char[] haystack = new char[1024*1024];
+    haystack[] = 'a';
+    haystack[$-1] = 'b';
+    import std.file : read, write;
+    write("data.dat", haystack);
+    haystack = cast(char[])read("data.dat");
+    bool testInterpretted() {
+        scramble(haystack);
+        scramble(interpretted);
+        return interpretted.run(haystack, null);
+    }
+    bool testNative() {
+        scramble(haystack);
+        scramble(native);
+        return native.run(haystack, null);
+    }
+    bool testBitNFA() {
+        scramble(haystack);
+        scramble(bitNFA);
+        return bitNFA.search(haystack) > 0;
+    }
+    bool testShiftOR() {
+        //scramble(haystack);
+        //scramble(shiftOr);
+        return shiftOr.search(haystack) > 0;
+    }
+    bool testVectorShiftOR() {
+        scramble(haystack);
+        scramble(vectorShiftOr);
+        return vectorShiftOr.search(haystack) > 0;
+    }
+    bool testMemChr() {
+        import core.stdc.string;
+        scramble(haystack);
+        return memchr(haystack.ptr, 'b', haystack.length) != null;
+    }
+    auto timings = benchmark!(
+        () { return scramble(testInterpretted()); },
+        () { return scramble(testNative()); },
+        () { return scramble(testBitNFA()); },
+        () { return scramble(testShiftOR()); },
+        () { return scramble(testVectorShiftOR()); },
+        () { return scramble(testMemChr()); }
+    )(1);
+    
+    writeln("Interpretted ", timings[0]);
+    writeln("Native ", timings[1]);
+    writeln("BitNFA ", timings[2]);
+    writeln("Scalar Shiftor ", timings[3]);
+    writeln("Vector Shiftor ", timings[4]);
+    writeln("memchr ", timings[5]);
+}
+
+void main() {
+    import std.stdio;
+    writeln("Synthetic:");
+    synthetic();
+    writeln("Realistic:");
+    realistic();
 }
 
 }

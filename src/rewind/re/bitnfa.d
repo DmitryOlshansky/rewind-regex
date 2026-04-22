@@ -81,7 +81,7 @@ unittest {
     foreach (i; 0..32) {
         t.insert(1<<i, ~(1<<i));
     }
-    assert(t.entries.length == 64);
+    assert(t.length == 64);
     assert(t.mask == 63);
     foreach (i; 0..ushort.max) {
         assert((isPow2(i) && t[i] == ~i) || t[i] == -1);
@@ -159,19 +159,34 @@ struct BitNFABuilder {
 
 auto buildBitNFA(Program prog) {
     auto builder = BitNFABuilder(prog.code.length);
+    void collectJumpTargets(size_t i, ref bool[size_t] targets) {
+        auto op = opcode(prog.code[i]);
+        auto arg = argument(prog.code[i]);
+        if (op == Opcode.JMP) {
+            targets[(i + arg) & 0xFF_FFFF] = true;
+            collectJumpTargets((i + arg) & 0xFF_FFFF, targets);
+        } else if (op == Opcode.FORK) {
+            targets[i + 1] = true;
+            targets[(i + arg) & 0xFF_FFFF] = true;
+            collectJumpTargets(i + 1, targets);
+            collectJumpTargets((i + arg) & 0xFF_FFFF, targets);
+        }
+    }
     foreach (i, code; prog.code) with (Opcode) {
         auto op = opcode(code);
         auto arg = argument(code);
         switch(op) {
             case JMP:
-                builder.jumpTarget(i, (i + arg) & 0xFF_FFFF);
-                break;
             case FORK:
-                builder.jumpTarget(i, (i + arg) & 0xFF_FFFF);
-                builder.jumpTarget(i, i + 1);
+                bool[size_t] jumps;
+                collectJumpTargets(i, jumps);
+                foreach (k, v; jumps) {
+                    builder.jumpTarget(i, k);
+                }
                 break;
             case END:
-                builder.end(i-1);
+                builder.add(i, cast(char)0, cast(char)0x7F); // TODO: check non-ascii cases
+                builder.end(i);
                 break;
             case MARK:
                 assert(false, "must trim zero-width arguments");
@@ -219,6 +234,12 @@ struct BitNFA {
                 return idx;
             }
         }
+        state <<= 1;
+        auto m = state | jumpMask;
+        state &= jumps[m];
+        if ((finishMask & state) == 0) {
+            return slice.length;
+        }
         return -1;
     }
 }
@@ -233,10 +254,13 @@ auto bitNFA(string pattern) {
 }
 
 unittest {    
-    /*auto bit = bitNFA("a+b");
-    assert(bit.search("aab") == 2);
+    auto bit = bitNFA("a+b");
+    assert(bit.search("aab") == 3);
     assert(bit.search("aaa") == -1);
-    assert(bit.search("b") == -1);*/
+    assert(bit.search("b") == -1);
     auto bit2 = bitNFA("a+b+c");
-    assert(bit2.search("abc") == 2);
+    assert(bit2.search("abc") == 3);
+    assert(bitNFA("a*b*c").search("abc") == 3);
+    assert(bitNFA("a*b*c").search("abca") == 3);
+    assert(bitNFA("a*b*").search("abc") == 0);
 }
