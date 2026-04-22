@@ -39,7 +39,7 @@ void synthetic() {
     }
     auto fwd = compile(parse("(ab)+c")).forward;
     auto stripped = stripZeroWidth(fwd);
-    auto bitNFA = buildBitNFA(stripped);
+    auto bitNFA = buildBitNFA!BitNFA(stripped);
     auto interpretted = builder.toVM(false);
     auto native = builder.toVM(true);
     auto haystack = "abababababababababc";
@@ -94,12 +94,15 @@ void realistic() {
         code(END, 1);
         fixup(forked, start);
     }
+    auto needle = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab";
     auto fwd = compile(parse("a+b")).forward;
     auto stripped = stripZeroWidth(fwd);
-    auto bitNFA = buildBitNFA(stripped);
+    auto bitNFA = buildBitNFA!BitNFA(stripped);
+    auto fwdSimpler = compile(parse(needle)).forward;
+    auto strippedSimpler = stripZeroWidth(fwdSimpler);
+    auto nativeBitNFA = buildBitNFA!NativeBitNFA(strippedSimpler);
     auto interpretted = builder.toVM(false);
     auto native = builder.toVM(true);
-    auto needle = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab";
     auto shiftOr = buildShiftOr!ScalarBuilder(needle);
     auto vectorShiftOr = buildShiftOr!SimdBuilder(needle);
     char[] haystack = new char[1024*1024];
@@ -123,6 +126,11 @@ void realistic() {
         scramble(bitNFA);
         return bitNFA.search(haystack) > 0;
     }
+    bool testNativeBitNFA() {
+        scramble(haystack);
+        scramble(bitNFA);
+        return nativeBitNFA.search(haystack) > 0;
+    }
     bool testShiftOR() {
         //scramble(haystack);
         //scramble(shiftOr);
@@ -142,6 +150,7 @@ void realistic() {
         () { return scramble(testInterpretted()); },
         () { return scramble(testNative()); },
         () { return scramble(testBitNFA()); },
+        () { return scramble(testNativeBitNFA()); },
         () { return scramble(testShiftOR()); },
         () { return scramble(testVectorShiftOR()); },
         () { return scramble(testMemChr()); }
@@ -150,9 +159,10 @@ void realistic() {
     writeln("Interpretted ", timings[0]);
     writeln("Native ", timings[1]);
     writeln("BitNFA ", timings[2]);
-    writeln("Scalar Shiftor ", timings[3]);
-    writeln("Vector Shiftor ", timings[4]);
-    writeln("memchr ", timings[5]);
+    writeln("Native BitNFA ", timings[3]);
+    writeln("Scalar Shiftor ", timings[4]);
+    writeln("Vector Shiftor ", timings[5]);
+    writeln("memchr ", timings[6]);
 }
 
 void main() {

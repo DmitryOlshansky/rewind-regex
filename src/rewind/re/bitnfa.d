@@ -96,6 +96,7 @@ struct BitNFABuilder {
     ulong finishMask = 0;
 // internal state
     size_t[][] jumpTargets;
+    void* native;
 
     this(size_t size) {
         assert(size > 0 && size < 64);
@@ -155,9 +156,58 @@ struct BitNFABuilder {
         }
         return this;
     }
+
+    ref buildNative() {
+        version(AArch64) {
+            import rewind.re.dynasm.arm64;
+            Assembler assembler = Assembler(16 * 4096);
+            with (assembler) with(Condition) {
+                enum {
+                    FINISH = x(0),
+                    TABLE = x(1),
+                    LENGTH = x(2),
+                    INPUT_END = LENGTH,
+                    INPUT = x(3),
+                    STATE = x(5),
+                    LOOKUP_W = w(6),
+                    LOOKUP = x(6),
+                    SCRATCH = x(7),
+                    PTR = x(8),
+                }
+                auto loopStart = createLabel();
+                auto lastStep = createLabel();
+                auto found = createLabel();
+                mov(PTR, INPUT);
+                movn(STATE, imm(0));
+                add(INPUT_END, INPUT, LENGTH);
+            bind(loopStart);
+                cmp(PTR, INPUT_END);
+                b(EQ, lastStep);
+                lsl(STATE, STATE, imm(1));
+                ldrb(LOOKUP_W, post(PTR, 1));
+                ldr(SCRATCH, mem(TABLE, LOOKUP, ExtendType.LSL, true));
+                orr(STATE, STATE, SCRATCH);
+                and(SCRATCH, STATE, FINISH);
+                b(NE, loopStart);
+            bind(found);
+                sub(x(0), PTR, INPUT);
+                ret();
+            bind(lastStep);
+                lsl(STATE, STATE, imm(1));
+                and(SCRATCH, STATE, FINISH);
+                cmp(SCRATCH, imm(0));
+                b(EQ, found);
+                movn(x(0), imm(0));
+                ret();
+            }
+            assembler.finalize();
+            native = assembler.data.ptr;
+        }
+        return this;
+    }
 }
 
-auto buildBitNFA(Program prog) {
+auto buildBitNFA(NFA)(Program prog) {
     auto builder = BitNFABuilder(prog.code.length);
     void collectJumpTargets(size_t i, ref bool[size_t] targets) {
         auto op = opcode(prog.code[i]);
@@ -197,7 +247,29 @@ auto buildBitNFA(Program prog) {
                 assert(false);
         }
     }
-    return BitNFA(builder.build);
+    static if(is(NFA == NativeBitNFA)) {
+        return NFA(builder.buildNative);
+    }
+    else {
+        return NFA(builder.build);
+    }   
+}
+
+struct NativeBitNFA {
+    ulong[256] table;
+    ulong finishMask;
+    void* native;
+
+    this(ref BitNFABuilder builder) {
+        table = builder.table;
+        finishMask = builder.finishMask;
+        native = builder.native;
+    }
+
+    ptrdiff_t search(const(char)[] slice) {
+        auto fn = cast(ptrdiff_t function(ulong, ulong*, const(char)[] slice))native;
+        return fn(finishMask, table.ptr, slice);
+    }
 }
 
 struct BitNFA {
@@ -250,7 +322,16 @@ auto bitNFA(string pattern) {
     auto ast = parse(pattern);
     auto pp = compile(ast);
     auto trimmed = pp.forward.stripZeroWidth();
-    return buildBitNFA(trimmed);
+    return buildBitNFA!BitNFA(trimmed);
+}
+
+version(unittest)
+auto nativeBitNFA(string pattern) {
+    import rewind.re.parser;
+    auto ast = parse(pattern);
+    auto pp = compile(ast);
+    auto trimmed = pp.forward.stripZeroWidth();
+    return buildBitNFA!NativeBitNFA(trimmed);
 }
 
 unittest {    
@@ -263,4 +344,9 @@ unittest {
     assert(bitNFA("a*b*c").search("abc") == 3);
     assert(bitNFA("a*b*c").search("abca") == 3);
     assert(bitNFA("a*b*").search("abc") == 0);
+}
+
+unittest {
+    auto bit = nativeBitNFA("aaab");
+    assert(bit.search("aaab") == 4);
 }

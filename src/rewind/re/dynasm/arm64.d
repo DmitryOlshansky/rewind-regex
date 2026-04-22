@@ -203,6 +203,15 @@ struct Assembler {
         emit((sf << 31) | 0x2A000000 | (rm.id << 16) | (31 << 5) | rd.id);
     }
 
+    void movn(Register rd, Immediate imm16, uint shift = 0) {
+        enforce(shift % 16 == 0 && shift <= (rd.size == RegSize.X ? 48 : 16),
+                "Invalid MOVN shift");
+        uint hw = shift / 16;
+        uint sf = (rd.size == RegSize.X) ? 1 : 0;
+        uint base = sf ? 0x92800000 : 0x12800000;
+        emit(base | (hw << 21) | (cast(uint)imm16.value << 5) | rd.id);
+    }
+
     /// ADD - Register addition
     void add(Register rd, Register rn, Register rm) {
         uint sf = (rd.size == RegSize.X) ? 1 : 0;
@@ -224,6 +233,103 @@ struct Assembler {
         uint instr = (sf << 31) | 0x11000000 | (sh << 22) |
                     (imm12 << 10) | (rn.id << 5) | rd.id;
         emit(instr);
+    }
+
+    // ==========================================
+    // SUB (Immediate)
+    // ==========================================
+    void sub(Register rd, Register rn, Immediate imm) {
+        uint sf = (rd.size == RegSize.X) ? 1 : 0;
+        enforce(imm.value <= 0xFFF, "SUB immediate must be 12-bit (0..4095)");
+        
+        uint sh = 0; // Set to 1 if you want to optionally shift the immediate left by 12
+        
+        // Encoding: sf(31) 10100010 sh(22) imm12(21:10) Rn(9:5) Rd(4:0)
+        // Note: 10100010 = 0x51000000
+        emit((sf << 31) | 0x51000000 | (sh << 22) | (imm.value << 10) | (rn.id << 5) | rd.id);
+    }
+
+    // ==========================================
+    // SUB (Shifted Register)
+    // ==========================================
+    void sub(Register rd, Register rn, Register rm) {
+        uint sf = (rd.size == RegSize.X) ? 1 : 0;
+        // Encoding: sf(31) 10010110 shift(23:22) 0 Rm(20:16) imm6(15:10) Rn(9:5) Rd(4:0)
+        // Note: 10010110 = 0x4B000000
+        emit((sf << 31) | 0x4B000000 | (rm.id << 16) | (rn.id << 5) | rd.id);
+    }
+
+
+    // ==========================================
+    // Logical Operations (Register-Register)
+    // ==========================================
+
+    /// AND - Bitwise AND
+    void and(Register rd, Register rn, Register rm) {
+        uint sf = (rd.size == RegSize.X) ? 1 : 0;
+        // Encoding: sf(31) 00 0 1010 0 00(shift) 0 Rm(20:16) 000000 Rn(9:5) Rd(4:0)
+        emit((sf << 31) | 0x0A000000 | (rm.id << 16) | (rn.id << 5) | rd.id);
+    }
+
+    /// ORR - Bitwise OR
+    void orr(Register rd, Register rn, Register rm) {
+        uint sf = (rd.size == RegSize.X) ? 1 : 0;
+        // Encoding: sf(31) 01 0 1010 0 00(shift) 0 Rm(20:16) 000000 Rn(9:5) Rd(4:0)
+        emit((sf << 31) | 0x2A000000 | (rm.id << 16) | (rn.id << 5) | rd.id);
+    }
+
+    // ==========================================
+    // Shifts & Rotates (Immediate / Bitfield Aliases)
+    // ==========================================
+
+    /// LSL - Logical Shift Left Immediate (Alias of UBFM)
+    void lsl(Register rd, Register rn, Immediate imm) {
+        uint sf = (rd.size == RegSize.X) ? 1 : 0;
+        uint maxShift = sf ? 63 : 31;
+        uint sh = imm.value & maxShift; // limit shift to register size
+        
+        // LSL requires wrapping the shift amounts for UBFM
+        uint immr = (maxShift + 1 - sh) & maxShift;
+        uint imms = maxShift - sh;
+        
+        // Encoding: sf(31) 10100110 N(22) immr(21:16) imms(15:10) Rn(9:5) Rd(4:0)
+        emit((sf << 31) | 0x53000000 | (sf << 22) | (immr << 16) | (imms << 10) | (rn.id << 5) | rd.id);
+    }
+
+    /// LSR - Logical Shift Right Immediate (Alias of UBFM)
+    void lsr(Register rd, Register rn, Immediate imm) {
+        uint sf = (rd.size == RegSize.X) ? 1 : 0;
+        uint maxShift = sf ? 63 : 31;
+        uint sh = imm.value & maxShift;
+        
+        uint immr = sh;
+        uint imms = maxShift;
+        
+        emit((sf << 31) | 0x53000000 | (sf << 22) | (immr << 16) | (imms << 10) | (rn.id << 5) | rd.id);
+    }
+
+    /// ASR - Arithmetic Shift Right Immediate (Alias of SBFM)
+    void asr(Register rd, Register rn, Immediate imm) {
+        uint sf = (rd.size == RegSize.X) ? 1 : 0;
+        uint maxShift = sf ? 63 : 31;
+        uint sh = imm.value & maxShift;
+        
+        uint immr = sh;
+        uint imms = maxShift;
+        
+        // SBFM base: sf(31) 00100110 N(22)
+        emit((sf << 31) | 0x13000000 | (sf << 22) | (immr << 16) | (imms << 10) | (rn.id << 5) | rd.id);
+    }
+
+    /// ROR - Rotate Right Immediate (Alias of EXTR)
+    void ror(Register rd, Register rn, Immediate imm) {
+        uint sf = (rd.size == RegSize.X) ? 1 : 0;
+        uint maxShift = sf ? 63 : 31;
+        uint sh = imm.value & maxShift;
+        
+        // EXTR rotates the pair Rm:Rn. For ROR, we set Rm = Rn.
+        // Base: sf(31) 00100111 N(22) Rm(20:16) imms(15:10) Rn(9:5) Rd(4:0)
+        emit((sf << 31) | 0x13800000 | (sf << 22) | (rn.id << 16) | (sh << 10) | (rn.id << 5) | rd.id);
     }
 
     /// B - Unconditional Branch
