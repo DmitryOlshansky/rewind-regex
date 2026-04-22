@@ -70,8 +70,6 @@ unittest {
     assert(find("bbc", searcher) == -1);
 }
 
-version(X86_64) {
-
 import ldc.simd;
 
 alias v4u64 = __vector(ulong[4]);
@@ -151,6 +149,4 @@ unittest {
     assert(find(text, longSearcher) == 0);
     text[75] = 'A';
     assert(find(text, longSearcher) == -1);
-}
-
 }

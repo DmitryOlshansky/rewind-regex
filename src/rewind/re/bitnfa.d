@@ -21,20 +21,22 @@ struct SIHT {
         ulong key = -1;
         ulong value = -1;
     }
-    Entry[] entries;
+    Entry* entries;
+    uint length;
     uint mask;
     uint items;
     uint log2Size;
 
     this(size_t size) {
         assert(isPow2(size) && size >= 4);
-        entries = new Entry[size];
+        entries = (new Entry[size]).ptr;
+        length = cast(uint)size;
         log2Size = bsr(size);
         mask = cast(uint)(size - 1);
     }
 
     void insert(ulong key, ulong value) {
-        if (2*items > entries.length) rehash();
+        if (2*items > length) rehash();
         auto h = hash(key, log2Size);
         auto idx = h & mask;
         for (;;) {
@@ -64,8 +66,8 @@ struct SIHT {
 
     // double the table size
     void rehash() {
-        SIHT extended = SIHT(entries.length * 2);
-        for (size_t i = 0; i < entries.length; i++) {
+        SIHT extended = SIHT(length * 2);
+        for (size_t i = 0; i < length; i++) {
             if (entries[i].key != -1) {
                 extended.insert(entries[i].key, entries[i].value);
             }
