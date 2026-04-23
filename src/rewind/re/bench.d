@@ -37,9 +37,10 @@ void synthetic() {
         code(END, 1);
         fixup(forked, start);
     }
-    auto fwd = compile(parse("(ab)+c")).forward;
+    auto fwd = compile(parse("(ab)+(ab)+(ab)+(ab)+c")).forward;
     auto stripped = stripZeroWidth(fwd);
     auto bitNFA = buildBitNFA!BitNFA(stripped);
+    auto nativeBitNFA = buildBitNFA!NativeBitNFA(stripped);
     auto interpretted = builder.toVM(false);
     auto native = builder.toVM(true);
     auto haystack = "abababababababababc";
@@ -60,6 +61,11 @@ void synthetic() {
         scramble(bitNFA);
         return bitNFA.search(haystack) > 0;
     }
+    bool testNativeBitNFA() {
+        scramble(haystack);
+        scramble(bitNFA);
+        return nativeBitNFA.search(haystack) > 0;
+    }
     bool testShiftOR() {
         scramble(haystack);
         scramble(shiftOr);
@@ -74,14 +80,16 @@ void synthetic() {
         () { return scramble(testInterpretted()); },
         () { return scramble(testNative()); },
         () { return scramble(testBitNFA()); },
+        () { return scramble(testNativeBitNFA()); },
         () { return scramble(testShiftOR()); },
         () { return scramble(testVectorShiftOR()); }
     )(1_000_000);
     writeln("Interpretted ", timings[0]);
     writeln("Native ", timings[1]);
     writeln("BitNFA ", timings[2]);
-    writeln("Scalar Shiftor ", timings[3]);
-    writeln("Vector Shiftor ", timings[4]);
+    writeln("Native BitNFA ", timings[3]);
+    writeln("Scalar Shiftor ", timings[4]);
+    writeln("Vector Shiftor ", timings[5]);
 }
 
 void realistic() {
@@ -95,12 +103,10 @@ void realistic() {
         fixup(forked, start);
     }
     auto needle = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab";
-    auto fwd = compile(parse("a+b")).forward;
+    auto fwd = compile(parse("a*a*a*a*b")).forward;
     auto stripped = stripZeroWidth(fwd);
-    auto bitNFA = buildBitNFA!BitNFA(stripped);
-    auto fwdSimpler = compile(parse(needle)).forward;
-    auto strippedSimpler = stripZeroWidth(fwdSimpler);
-    auto nativeBitNFA = buildBitNFA!NativeBitNFA(strippedSimpler);
+    auto bitNFA = buildBitNFA!BitNFA(stripped);;
+    auto nativeBitNFA = buildBitNFA!NativeBitNFA(stripped);
     auto interpretted = builder.toVM(false);
     auto native = builder.toVM(true);
     auto shiftOr = buildShiftOr!ScalarBuilder(needle);

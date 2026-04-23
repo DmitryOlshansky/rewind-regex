@@ -160,6 +160,16 @@ struct BitNFABuilder {
     ref buildNative() {
         version(AArch64) {
             import rewind.re.dynasm.arm64;
+            static struct Entry {
+                size_t branch;
+                size_t[] targets;
+            }
+            Entry[] entries;
+            foreach (i, jts; jumpTargets) {
+                if (!jts.empty) {
+                    entries ~= Entry(i, jts);
+                }
+            }
             Assembler assembler = Assembler(16 * 4096);
             with (assembler) with(Condition) {
                 enum {
@@ -173,6 +183,8 @@ struct BitNFABuilder {
                     LOOKUP = x(6),
                     SCRATCH = x(7),
                     PTR = x(8),
+                    SCRATCH_2 = x(9),
+                    SCRATCH_3 = x(18)
                 }
                 auto loopStart = createLabel();
                 auto lastStep = createLabel();
@@ -180,10 +192,29 @@ struct BitNFABuilder {
                 mov(PTR, INPUT);
                 movn(STATE, imm(0));
                 add(INPUT_END, INPUT, LENGTH);
+                foreach (i, e; entries) {
+                    movn(x(10+cast(int)i), imm(1));
+                    if (e.branch != 0) {
+                        ror(x(10+cast(int)i), x(10+cast(int)i), imm(64 - cast(int)e.branch));
+                    }
+                }
             bind(loopStart);
                 cmp(PTR, INPUT_END);
                 b(EQ, lastStep);
                 lsl(STATE, STATE, imm(1));
+                foreach (i, e; entries) {
+                    orr(SCRATCH_2, STATE, x(10+cast(int)i));
+                    foreach (t; e.targets) {
+                        if (e.branch > t) {
+                            ror(SCRATCH, SCRATCH_2, imm(cast(uint)(e.branch-t)));
+                            and(STATE, STATE, SCRATCH_3);
+                        }
+                        else if (t > e.branch) {
+                            ror(SCRATCH_3, SCRATCH_2, imm(cast(uint)(64 - t + e.branch)));
+                            and(STATE, STATE, SCRATCH_3);
+                        }
+                    }
+                }
                 ldrb(LOOKUP_W, post(PTR, 1));
                 ldr(SCRATCH, mem(TABLE, LOOKUP, ExtendType.LSL, true));
                 orr(STATE, STATE, SCRATCH);
@@ -349,4 +380,6 @@ unittest {
 unittest {
     auto bit = nativeBitNFA("aaab");
     assert(bit.search("aaab") == 4);
+    assert(nativeBitNFA("a+b").search("aaab") == 4);
+    assert(nativeBitNFA("a*b").search("aab") == 3);
 }

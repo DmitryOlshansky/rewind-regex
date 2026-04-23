@@ -252,6 +252,13 @@ unittest {
             fixup(toEnd, end);
         }
     });
+    testCompileSym("(ab)*(ab)*", (fwd) { 
+        with(fwd) with(Opcode) {
+            code(MARK, 0);
+            code(MARK, 1);
+            code(END, 1);
+        }
+    });
     testCompileSym("a|b|c", (fwd) {
         with (fwd) with(Opcode) {
             code(MARK, 0);
