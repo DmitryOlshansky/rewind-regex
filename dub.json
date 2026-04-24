@@ -6,6 +6,16 @@
 	"dependencies": {
 		"pry": "0.7.0"
 	},
+	"preBuildCommands": [
+		"mkdir -p build",
+		"clang -c src/rewind/re/asm/prefilter_arm64.S -o build/prefilter.o"
+	],
+	"lflags-posix": [
+    	"build/prefilter.o"
+  	],
+	"extraDependencyFiles": [
+		"src/rewind/re/asm/prefilter_arm64.S"
+	],
 	"targetType": "executable",
 	"description": "REwind Regex. Radical and brutal twin of std.regex library",
 	"copyright": "Copyright © 2018, Dmitry Olshansky",

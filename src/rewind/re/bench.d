@@ -1,7 +1,7 @@
 module rewind.re.bench;
 
 import rewind.re.bytecode, rewind.re.thompson, rewind.re.bitnfa, rewind.re.codegen, rewind.re.parser,
-    rewind.re.shiftor;
+    rewind.re.shiftor, rewind.re.prefilter;
 
 version(unittest) {}
 else {
@@ -111,6 +111,9 @@ void realistic() {
     auto native = builder.toVM(true);
     auto shiftOr = buildShiftOr!ScalarBuilder(needle);
     auto vectorShiftOr = buildShiftOr!SimdBuilder(needle);
+    auto prefilter = Prefilter();
+    prefilter.add(false, 'b');
+    prefilter.end(1);
     char[] haystack = new char[1024*1024];
     haystack[] = 'a';
     haystack[$-1] = 'b';
@@ -147,6 +150,11 @@ void realistic() {
         scramble(vectorShiftOr);
         return vectorShiftOr.search(haystack) > 0;
     }
+    bool testPrefilter() {
+        scramble(haystack);
+        scramble(prefilter);
+        return prefilter.find(haystack) > 0;
+    }
     bool testMemChr() {
         import core.stdc.string;
         scramble(haystack);
@@ -159,6 +167,7 @@ void realistic() {
         () { return scramble(testNativeBitNFA()); },
         () { return scramble(testShiftOR()); },
         () { return scramble(testVectorShiftOR()); },
+        () { return scramble(testPrefilter()); },
         () { return scramble(testMemChr()); }
     )(1);
     
@@ -168,7 +177,8 @@ void realistic() {
     writeln("Native BitNFA ", timings[3]);
     writeln("Scalar Shiftor ", timings[4]);
     writeln("Vector Shiftor ", timings[5]);
-    writeln("memchr ", timings[6]);
+    writeln("Prefilter ", timings[6]);
+    writeln("memchr ", timings[7]);
 }
 
 void main() {
