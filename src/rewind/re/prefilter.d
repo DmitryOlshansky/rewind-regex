@@ -22,6 +22,7 @@ struct Prefilter {
 extern(C) @nogc nothrow ptrdiff_t rewindRePrefilter(const(char)* start, const(char)* end, size_t length, 
     const(ubyte)* first, const(ubyte)* last);
 
+extern(C) @nogc nothrow ptrdiff_t rewindReFindByte(const(char)* start, const(char)* end, ubyte b);
 
 unittest {
     char[] haystack = new char[256];
@@ -31,4 +32,5 @@ unittest {
     prefilter.add(false, 'B');
     prefilter.end(1);
     assert(prefilter.find(haystack) == haystack.length-32);
+    assert(rewindReFindByte(haystack.ptr, haystack.ptr+haystack.length, 'B') == haystack.length-32);
 }

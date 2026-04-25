@@ -155,6 +155,11 @@ void realistic() {
         scramble(prefilter);
         return prefilter.find(haystack) > 0;
     }
+    bool testByteFind() {
+        scramble(haystack);
+        scramble(prefilter);
+        return rewindReFindByte(haystack.ptr, haystack.ptr+haystack.length, 'b') > 0;
+    }
     bool testMemChr() {
         import core.stdc.string;
         scramble(haystack);
@@ -168,24 +173,26 @@ void realistic() {
         () { return scramble(testShiftOR()); },
         () { return scramble(testVectorShiftOR()); },
         () { return scramble(testPrefilter()); },
+        () { return scramble(testByteFind()); },
         () { return scramble(testMemChr()); }
     )(1);
-    
-    writeln("Interpretted ", timings[0]);
-    writeln("Native ", timings[1]);
-    writeln("BitNFA ", timings[2]);
-    writeln("Native BitNFA ", timings[3]);
-    writeln("Scalar Shiftor ", timings[4]);
-    writeln("Vector Shiftor ", timings[5]);
-    writeln("Prefilter ", timings[6]);
-    writeln("memchr ", timings[7]);
+    size_t i = 0;
+    writeln("Interpretted ", timings[i++]);
+    writeln("Native ", timings[i++]);
+    writeln("BitNFA ", timings[i++]);
+    writeln("Native BitNFA ", timings[i++]);
+    writeln("Scalar Shiftor ", timings[i++]);
+    writeln("Vector Shiftor ", timings[i++]);
+    writeln("Prefilter ", timings[i++]);
+    writeln("FindByte ", timings[i++]);  
+    writeln("memchr ", timings[i++]);
 }
 
 void main() {
     import std.stdio;
-    writeln("Synthetic:");
+    writeln("Small haystack:");
     synthetic();
-    writeln("Realistic:");
+    writeln("Large haystack:");
     realistic();
 }
 
