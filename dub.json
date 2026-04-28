@@ -8,13 +8,16 @@
 	},
 	"preBuildCommands": [
 		"mkdir -p build",
-		"clang -c src/rewind/re/asm/prefilter_arm64.S -o build/prefilter.o"
+		"clang -c src/rewind/re/asm/prefilter_tt_arm64.S -o build/prefilter_tt.o",
+		"clang -c src/rewind/re/asm/prefilter_bb_arm64.S -o build/prefilter_bb.o"
 	],
 	"lflags-posix": [
-    	"build/prefilter.o"
+    	"build/prefilter_bb.o",
+		"build/prefilter_tt.o"
   	],
 	"extraDependencyFiles": [
-		"src/rewind/re/asm/prefilter_arm64.S"
+		"src/rewind/re/asm/prefilter_bb_arm64.S",
+		"src/rewind/re/asm/prefilter_tt_arm64.S"
 	],
 	"targetType": "executable",
 	"description": "REwind Regex. Radical and brutal twin of std.regex library",

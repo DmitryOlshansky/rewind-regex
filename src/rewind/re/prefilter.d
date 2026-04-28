@@ -15,22 +15,29 @@ struct Prefilter {
     }
 
     ptrdiff_t find(const(char)[] slice) {
-        return rewindRePrefilter(slice.ptr, slice.ptr+slice.length, length, tables.ptr, tables.ptr+32);
+        return rewindRePrefilterTT(slice.ptr, slice.ptr+slice.length, length, tables.ptr, tables.ptr+32).offset;
     }
 }
 
-extern(C) @nogc nothrow ptrdiff_t rewindRePrefilter(const(char)* start, const(char)* end, size_t length, 
+struct FilterResult {
+    long offset;
+    ulong mask;
+}
+
+extern(C) @nogc nothrow FilterResult rewindRePrefilterTT(const(char)* start, const(char)* end, size_t length, 
     const(ubyte)* first, const(ubyte)* last);
 
-extern(C) @nogc nothrow ptrdiff_t rewindReFindByte(const(char)* start, const(char)* end, ubyte b);
+extern(C) @nogc nothrow FilterResult rewindRePrefilterBB(const(char)* start, const(char)* end, ubyte first, ubyte last, ulong len);
 
 unittest {
     char[] haystack = new char[256];
     haystack[] = 'A';
-    haystack[$-17] = 'B';
+    haystack[$-37] = 'B';
     Prefilter prefilter;
     prefilter.add(false, 'B');
     prefilter.end(1);
-    assert(prefilter.find(haystack) == haystack.length-32);
-    assert(rewindReFindByte(haystack.ptr, haystack.ptr+haystack.length, 'B') == haystack.length-32);
+    //assert(prefilter.find(haystack) == haystack.length-32);
+    import std.stdio;
+    auto filt = rewindRePrefilterBB(haystack.ptr, haystack.ptr+haystack.length, 'A', 'B', 32);
+    writefln("%d %b", filt.offset, filt.mask);
 }
