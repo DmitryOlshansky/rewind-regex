@@ -40,9 +40,6 @@ loop_vector:
     b.eq    scalar
     ld1     {BYTES}, [PTR], #16
     cmeq    RES, BYTES, FIRST_V
-    umaxv   s11, RES_W
-    fmov    w11, s11
-    cbz     w11, loop_vector
     
     ldr     BYTES_Q, [PTR, OFFSET]
     cmeq    RES2, BYTES, LAST_V

@@ -141,8 +141,8 @@ void realistic() {
         return nativeBitNFA.search(haystack) > 0;
     }
     bool testShiftOR() {
-        //scramble(haystack);
-        //scramble(shiftOr);
+        scramble(haystack);
+        scramble(shiftOr);
         return shiftOr.search(haystack) > 0;
     }
     bool testVectorShiftOR() {
@@ -155,10 +155,9 @@ void realistic() {
         scramble(prefilter);
         return prefilter.find(haystack) > 0;
     }
-    bool testByteFind() {
+    bool testPrefilterBB() {
         scramble(haystack);
-        scramble(prefilter);
-        return rewindReFindByte(haystack.ptr, haystack.ptr+haystack.length, 'b') > 0;
+        return rewindRePrefilterBB(haystack.ptr, haystack.ptr+haystack.length, 'a', 'b', needle.length).offset > 0;
     }
     bool testMemChr() {
         import core.stdc.string;
@@ -173,7 +172,7 @@ void realistic() {
         () { return scramble(testShiftOR()); },
         () { return scramble(testVectorShiftOR()); },
         () { return scramble(testPrefilter()); },
-        () { return scramble(testByteFind()); },
+        () { return scramble(testPrefilterBB()); },
         () { return scramble(testMemChr()); }
     )(1);
     size_t i = 0;
@@ -184,7 +183,7 @@ void realistic() {
     writeln("Scalar Shiftor ", timings[i++]);
     writeln("Vector Shiftor ", timings[i++]);
     writeln("Prefilter ", timings[i++]);
-    writeln("FindByte ", timings[i++]);  
+    writeln("PrefilterBB ", timings[i++]);  
     writeln("memchr ", timings[i++]);
 }
 
