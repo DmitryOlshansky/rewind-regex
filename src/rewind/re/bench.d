@@ -112,8 +112,9 @@ void realistic() {
     auto shiftOr = buildShiftOr!ScalarBuilder(needle);
     auto vectorShiftOr = buildShiftOr!SimdBuilder(needle);
     auto prefilter = Prefilter();
-    prefilter.add(false, 'b');
-    prefilter.end(1);
+    prefilter.add(false, 'a');
+    prefilter.add(true, 'b');
+    prefilter.end(needle.length);
     char[] haystack = new char[1024*1024];
     haystack[] = 'a';
     haystack[$-1] = 'b';
@@ -153,7 +154,7 @@ void realistic() {
     bool testPrefilter() {
         scramble(haystack);
         scramble(prefilter);
-        return prefilter.find(haystack) > 0;
+        return prefilter.find(haystack).offset > 0;
     }
     bool testPrefilterBB() {
         scramble(haystack);
@@ -182,7 +183,7 @@ void realistic() {
     writeln("Native BitNFA ", timings[i++]);
     writeln("Scalar Shiftor ", timings[i++]);
     writeln("Vector Shiftor ", timings[i++]);
-    writeln("Prefilter ", timings[i++]);
+    writeln("PrefilterTT ", timings[i++]);
     writeln("PrefilterBB ", timings[i++]);  
     writeln("memchr ", timings[i++]);
 }

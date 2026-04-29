@@ -14,8 +14,8 @@ struct Prefilter {
         length = len;
     }
 
-    ptrdiff_t find(const(char)[] slice) {
-        return rewindRePrefilterTT(slice.ptr, slice.ptr+slice.length, length, tables.ptr, tables.ptr+32).offset;
+    FilterResult find(const(char)[] slice) {
+        return rewindRePrefilterTT(slice.ptr, slice.ptr+slice.length, tables.ptr, tables.ptr+32, length);
     }
 }
 
@@ -24,16 +24,17 @@ struct FilterResult {
     ulong mask;
 }
 
-extern(C) @nogc nothrow FilterResult rewindRePrefilterTT(const(char)* start, const(char)* end, size_t length, 
-    const(ubyte)* first, const(ubyte)* last);
+extern(C) @nogc nothrow FilterResult rewindRePrefilterTT(const(char)* start, const(char)* end, 
+    const(ubyte)* first, const(ubyte)* last,  ulong length);
 
-extern(C) @nogc nothrow FilterResult rewindRePrefilterBB(const(char)* start, const(char)* end, ubyte first, ubyte last, ulong len);
+extern(C) @nogc nothrow FilterResult rewindRePrefilterBB(const(char)* start, const(char)* end, 
+    ubyte first, ubyte last, ulong length);
 
 version(unittest) {
     
-    void checkPos(int pos, int len) {
+    void checkPos(int pos, int len, int haystackLen) {
         import core.bitop, std.conv;
-        char[] haystack = new char[255];
+        char[] haystack = new char[haystackLen];
         haystack[] = 0x7F;
         haystack[pos] = 0xFF;
         auto filt = rewindRePrefilterBB(haystack.ptr, haystack.ptr+haystack.length, 0x7F, 0xFF, len);
@@ -43,20 +44,38 @@ version(unittest) {
             assert(filt.offset == -1, text(filt.offset, " mask ", filt.mask, " vs ", pos));
         }
     }
+
+    void checkPosTable(int pos, int len, int haystackLen) {
+        import core.bitop, std.conv;
+        char[] haystack = new char[haystackLen];
+        haystack[] = 0x7F;
+        haystack[pos] = 0xFF;
+        Prefilter prefilter;
+        prefilter.add(false, 0x7F);
+        prefilter.add(true, 0xFF);
+        prefilter.end(len);
+        auto filt = prefilter.find(haystack);
+        if (pos >= len-1) {
+            assert(filt.offset + bsf(filt.mask) == pos-len+1, text(filt.offset,  " mask ", filt.mask, " vs ", pos));
+        } else {
+            assert(filt.offset == -1, text(filt.offset, " mask ", filt.mask, " vs ", pos));
+        }
+    }
 }
 
 unittest {
-    char[] haystack = new char[256];
-    haystack[] = 'A';
-    haystack[$-17] = 'B';
-    Prefilter prefilter;
-    prefilter.add(false, 'B');
-    prefilter.end(1);
-    assert(prefilter.find(haystack) == haystack.length-32);
+    foreach(h; [255, 256])
     foreach (i; 0..255) {
-        checkPos(i, 3);
-        checkPos(i, 11);
-        checkPos(i, 17);
-        checkPos(i, 32);
+        checkPos(i, 3, h);
+        checkPos(i, 11, h);
+        checkPos(i, 17, h);
+        checkPos(i, 32, h);
+    }
+    foreach(h; [255, 256])
+    foreach (i; 0..255) {
+        checkPosTable(i, 3, h);
+        checkPosTable(i, 11, h);
+        checkPosTable(i, 17, h);
+        checkPosTable(i, 32, h);
     }
 }
