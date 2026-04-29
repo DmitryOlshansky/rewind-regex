@@ -34,9 +34,9 @@ version(unittest) {
     void checkPos(int pos, int len) {
         import core.bitop, std.conv;
         char[] haystack = new char[255];
-        haystack[] = 'A';
-        haystack[pos] = 'B';
-        auto filt = rewindRePrefilterBB(haystack.ptr, haystack.ptr+haystack.length, 'A', 'B', len);
+        haystack[] = 0x7F;
+        haystack[pos] = 0xFF;
+        auto filt = rewindRePrefilterBB(haystack.ptr, haystack.ptr+haystack.length, 0x7F, 0xFF, len);
         if (pos >= len-1) {
             assert(filt.offset + bsf(filt.mask) == pos-len+1, text(filt.offset,  " mask ", filt.mask, " vs ", pos));
         } else {
