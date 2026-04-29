@@ -29,15 +29,34 @@ extern(C) @nogc nothrow FilterResult rewindRePrefilterTT(const(char)* start, con
 
 extern(C) @nogc nothrow FilterResult rewindRePrefilterBB(const(char)* start, const(char)* end, ubyte first, ubyte last, ulong len);
 
+version(unittest) {
+    
+    void checkPos(int pos, int len) {
+        import core.bitop, std.conv;
+        char[] haystack = new char[255];
+        haystack[] = 'A';
+        haystack[pos] = 'B';
+        auto filt = rewindRePrefilterBB(haystack.ptr, haystack.ptr+haystack.length, 'A', 'B', len);
+        if (pos >= len-1) {
+            assert(filt.offset + bsf(filt.mask) == pos-len+1, text(filt.offset,  " mask ", filt.mask, " vs ", pos));
+        } else {
+            assert(filt.offset == -1, text(filt.offset, " mask ", filt.mask, " vs ", pos));
+        }
+    }
+}
+
 unittest {
     char[] haystack = new char[256];
     haystack[] = 'A';
-    haystack[$-37] = 'B';
+    haystack[$-17] = 'B';
     Prefilter prefilter;
     prefilter.add(false, 'B');
     prefilter.end(1);
-    //assert(prefilter.find(haystack) == haystack.length-32);
-    import std.stdio;
-    auto filt = rewindRePrefilterBB(haystack.ptr, haystack.ptr+haystack.length, 'A', 'B', 32);
-    writefln("%d %b", filt.offset, filt.mask);
+    assert(prefilter.find(haystack) == haystack.length-32);
+    foreach (i; 0..255) {
+        checkPos(i, 3);
+        checkPos(i, 11);
+        checkPos(i, 17);
+        checkPos(i, 32);
+    }
 }

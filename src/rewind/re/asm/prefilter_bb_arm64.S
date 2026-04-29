@@ -7,6 +7,10 @@
 #define PTR x6
 #define V_INPUT_END x7
 #define SCRATCH x8
+#define SCRATCH_W w8
+#define MASK    x9
+#define RES_SCALAR x10
+#define SCALAR_PTR x11
 
 #define FIRST_V v0.16b
 #define LAST_V v1.16b
@@ -28,8 +32,7 @@ rewindRePrefilterBB:
     sub     V_INPUT_END, END_INPUT, LEN
     movn    SCRATCH, #15
     and     V_INPUT_END, V_INPUT_END, SCRATCH
-    mov     OFFSET, LEN
-    sub     OFFSET, OFFSET, #15  // offset is relative to (addr+16) postincremented: len - 16
+    sub     OFFSET, LEN, #17  // offset is relative to (addr+16) postincremented: len - 16
     dup     FIRST_V, FIRST
     dup     LAST_V, LAST
 loop_vector:
@@ -60,8 +63,34 @@ loop_vector:
     mov     x0, PTR
     ret
 scalar:
-    sub PTR, PTR, #16
-    mov x0, #-1
+    mov     SCALAR_PTR, PTR
+    sub     OFFSET, LEN, #1 // -1 for last
+    sub     END_INPUT, END_INPUT, OFFSET
+    sub     OFFSET, OFFSET, #1 // -1 post increment
+    mov     MASK, #1
+    mov     RES_SCALAR, #0
+scalar_loop:
+    cmp     PTR, END_INPUT
+    b.eq    end
+    ldrb    SCRATCH_W, [PTR], #1
+    cmp     SCRATCH_W, FIRST
+    b.ne    scalar_next
+    ldrb    SCRATCH_W, [PTR, OFFSET]
+    cmp     SCRATCH_W, LAST
+    b.ne    scalar_next
+    orr     RES_SCALAR, RES_SCALAR, MASK
+scalar_next:
+    lsl     MASK, MASK, #1
+    b scalar_loop
+end:
+    cmp     RES_SCALAR, #0
+    b.eq    not_found
+    sub     x0, SCALAR_PTR, INPUT
+    mov     x1, RES_SCALAR
+    ret
+not_found:
+    mov     x0, #-1
+    mov     x1, #0
     ret
 
 .align 8
