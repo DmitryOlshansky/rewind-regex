@@ -4,7 +4,8 @@
 		"Dmitry Olshansky"
 	],
 	"dependencies": {
-		"pry": "0.7.0"
+		"pry": "0.7.0",
+		"rewind-asm": "0.1.0"
 	},
 	"preBuildCommands-posix": [
 		"mkdir -p build",
