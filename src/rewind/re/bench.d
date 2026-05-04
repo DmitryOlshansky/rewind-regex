@@ -64,7 +64,11 @@ void synthetic() {
     bool testNativeBitNFA() {
         scramble(haystack);
         scramble(bitNFA);
-        return nativeBitNFA.search(haystack) > 0;
+        version(AArch64) {
+            return nativeBitNFA.search(haystack) > 0;
+        } else {
+            return bitNFA.search(haystack) > 0;
+        }
     }
     bool testShiftOR() {
         scramble(haystack);
@@ -111,10 +115,12 @@ void realistic() {
     auto native = builder.toVM(true);
     auto shiftOr = buildShiftOr!ScalarBuilder(needle);
     auto vectorShiftOr = buildShiftOr!SimdBuilder(needle);
-    auto prefilter = Prefilter();
-    prefilter.add(false, 'a');
-    prefilter.add(true, 'b');
-    prefilter.end(needle.length);
+    version(AArch64) {
+        auto prefilter = Prefilter();
+        prefilter.add(false, 'a');
+        prefilter.add(true, 'b');
+        prefilter.end(needle.length);
+    }
     char[] haystack = new char[1024*1024];
     haystack[] = 'a';
     haystack[$-1] = 'b';
@@ -138,8 +144,12 @@ void realistic() {
     }
     bool testNativeBitNFA() {
         scramble(haystack);
-        scramble(bitNFA);
-        return nativeBitNFA.search(haystack) > 0;
+        version(AArch64) {
+            scramble(bitNFA);
+            return nativeBitNFA.search(haystack) > 0;
+        } else {
+            return bitNFA.search(haystack) > 0;
+        }
     }
     bool testShiftOR() {
         scramble(haystack);
@@ -153,12 +163,20 @@ void realistic() {
     }
     bool testPrefilter() {
         scramble(haystack);
-        scramble(prefilter);
-        return prefilter.find(haystack).offset > 0;
+        version(AArch64) {
+            scramble(prefilter);
+            return prefilter.find(haystack).offset > 0;
+        } else {
+            return false; 
+        }
     }
     bool testPrefilterBB() {
         scramble(haystack);
-        return rewindRePrefilterBB(haystack.ptr, haystack.ptr+haystack.length, 'a', 'b', needle.length).offset > 0;
+        version(AArch64) {
+            return rewindRePrefilterBB(haystack.ptr, haystack.ptr+haystack.length, 'a', 'b', needle.length).offset > 0;
+        } else {
+            return false;
+        }
     }
     bool testMemChr() {
         import core.stdc.string;

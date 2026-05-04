@@ -6,7 +6,7 @@
 	"dependencies": {
 		"pry": "0.7.0"
 	},
-	"preBuildCommands": [
+	"preBuildCommands-posix": [
 		"mkdir -p build",
 		"clang -c src/rewind/re/asm/prefilter_tt_arm64.S -o build/prefilter_tt.o",
 		"clang -c src/rewind/re/asm/prefilter_bb_arm64.S -o build/prefilter_bb.o"
@@ -15,7 +15,7 @@
     	"build/prefilter_bb.o",
 		"build/prefilter_tt.o"
   	],
-	"extraDependencyFiles": [
+	"extraDependencyFiles-posix": [
 		"src/rewind/re/asm/prefilter_bb_arm64.S",
 		"src/rewind/re/asm/prefilter_tt_arm64.S"
 	],

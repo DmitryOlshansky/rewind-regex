@@ -1,5 +1,7 @@
 module rewind.re.prefilter;
 
+version(Posix) {
+
 struct Prefilter {
     ubyte[64] tables;
     size_t length;
@@ -78,4 +80,6 @@ unittest {
         checkPosTable(i, 17, h);
         checkPosTable(i, 32, h);
     }
+}
+
 }

@@ -356,7 +356,9 @@ auto bitNFA(string pattern) {
     return buildBitNFA!BitNFA(trimmed);
 }
 
-version(unittest)
+version(Posix) {
+
+version(unittest) 
 auto nativeBitNFA(string pattern) {
     import rewind.re.parser;
     auto ast = parse(pattern);
@@ -382,4 +384,6 @@ unittest {
     assert(bit.search("aaab") == 4);
     assert(nativeBitNFA("a+b").search("aaab") == 4);
     assert(nativeBitNFA("a*b").search("aab") == 3);
+}
+
 }
