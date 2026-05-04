@@ -1,7 +1,5 @@
 module rewind.re.prefilter;
 
-version(Posix) {
-
 struct Prefilter {
     ubyte[64] tables;
     size_t length;
@@ -26,11 +24,29 @@ struct FilterResult {
     ulong mask;
 }
 
+version(AArch64) {
+
 extern(C) @nogc nothrow FilterResult rewindRePrefilterTT(const(char)* start, const(char)* end, 
     const(ubyte)* first, const(ubyte)* last,  ulong length);
 
 extern(C) @nogc nothrow FilterResult rewindRePrefilterBB(const(char)* start, const(char)* end, 
     ubyte first, ubyte last, ulong length);
+}
+
+extern(C) @nogc nothrow FilterResult rewindRePrefilterTT(const(char)* start, const(char)* end, 
+    const(ubyte)* first, const(ubyte)* last,  ulong length) {
+    return FilterResult.init;
+}
+
+extern(C) @nogc nothrow FilterResult rewindRePrefilterBB(const(char)* start, const(char)* end, 
+    ubyte first, ubyte last, ulong length) {
+    asm @nogc nothrow {
+        naked;
+        mov RAX, RCX;
+        
+        ret;
+    }
+}
 
 version(unittest) {
     
@@ -73,6 +89,11 @@ unittest {
         checkPos(i, 17, h);
         checkPos(i, 32, h);
     }
+}
+
+version(AArch64) {
+
+unittest {
     foreach(h; [255, 256])
     foreach (i; 0..255) {
         checkPosTable(i, 3, h);
