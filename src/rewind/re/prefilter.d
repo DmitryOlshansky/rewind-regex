@@ -33,6 +33,8 @@ extern(C) @nogc nothrow FilterResult rewindRePrefilterBB(const(char)* start, con
     ubyte first, ubyte last, ulong length);
 }
 
+version (X86_64) {
+
 extern(C) @nogc nothrow FilterResult rewindRePrefilterTT(const(char)* start, const(char)* end, 
     const(ubyte)* first, const(ubyte)* last,  ulong length) {
     return FilterResult.init;
@@ -46,6 +48,8 @@ extern(C) @nogc nothrow FilterResult rewindRePrefilterBB(const(char)* start, con
         
         ret;
     }
+}
+
 }
 
 version(unittest) {

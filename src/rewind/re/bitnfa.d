@@ -159,7 +159,7 @@ struct BitNFABuilder {
 
     ref buildNative() {
         version(AArch64) {
-            import rewind.re.dynasm.arm64;
+            import rewind.dynasm.arm64;
             static struct Entry {
                 size_t branch;
                 size_t[] targets;

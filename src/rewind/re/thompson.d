@@ -367,7 +367,7 @@ unittest {
 version(AArch64) {
 
 void* compileNativeCode(uint[] code) {
-    import rewind.re.dynasm.arm64;
+    import rewind.dynasm.arm64;
     import std.conv;
     enum {
         SEARCH = x(0),
