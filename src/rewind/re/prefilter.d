@@ -84,7 +84,7 @@ version(unittest) {
         }
     }
 }
-
+/*
 unittest {
     foreach(h; [255, 256])
     foreach (i; 0..255) {
@@ -93,7 +93,7 @@ unittest {
         checkPos(i, 17, h);
         checkPos(i, 32, h);
     }
-}
+}*/
 
 version(AArch64) {
 

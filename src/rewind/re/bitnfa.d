@@ -21,7 +21,8 @@ struct SIHT {
         ulong key = -1;
         ulong value = -1;
     }
-    Entry* entries;
+    ulong* keys;
+    ulong* values;
     uint length;
     uint mask;
     uint items;
@@ -29,20 +30,24 @@ struct SIHT {
 
     this(size_t size) {
         assert(isPow2(size) && size >= 4);
-        entries = (new Entry[size]).ptr;
+        keys = (new ulong[size]).ptr;
+        keys[0..size] = -1;
+        values = (new ulong[size]).ptr;
+        values[0..size] = -1;
         length = cast(uint)size;
         log2Size = bsr(size);
         mask = cast(uint)(size - 1);
     }
 
     void insert(ulong key, ulong value) {
-        if (2*items > length) rehash();
+        if (3*items > length) rehash();
         auto h = hash(key, log2Size);
-        auto idx = h & mask;
+        auto idx = h;
         for (;;) {
-            assert(entries[idx].key != key); // prevent double inserts
-            if (entries[idx].key == -1) {
-                entries[idx] = Entry(key, value);
+            assert(keys[idx] != key); // prevent double inserts
+            if (keys[idx] == -1) {
+                keys[idx] = key;
+                values[idx] = value;
                 items++;
                 break;
             }
@@ -52,13 +57,10 @@ struct SIHT {
 
     ulong opIndex(size_t key) {
         auto h = hash(key, log2Size);
-        auto idx = h & mask;
+        auto idx = h;
         for (;;) {
-            if (entries[idx].key == key) {
-                return entries[idx].value;
-            }
-            if (entries[idx].key == -1) {
-                return -1;
+            if (keys[idx] == key) {
+                return values[idx];
             }
             idx = (idx + 1) & mask;
         }
@@ -68,8 +70,8 @@ struct SIHT {
     void rehash() {
         SIHT extended = SIHT(length * 2);
         for (size_t i = 0; i < length; i++) {
-            if (entries[i].key != -1) {
-                extended.insert(entries[i].key, entries[i].value);
+            if (keys[i] != -1) {
+                extended.insert(keys[i], values[i]);
             }
         }
         this = extended;
