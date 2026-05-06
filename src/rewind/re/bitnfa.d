@@ -62,6 +62,9 @@ struct SIHT {
             if (keys[idx] == key) {
                 return values[idx];
             }
+            if (keys[idx] == -1) {
+                return -1;
+            }
             idx = (idx + 1) & mask;
         }
     }
@@ -83,8 +86,8 @@ unittest {
     foreach (i; 0..32) {
         t.insert(1<<i, ~(1<<i));
     }
-    assert(t.length == 64);
-    assert(t.mask == 63);
+    assert(t.length == 128);
+    assert(t.mask == 127);
     foreach (i; 0..ushort.max) {
         assert((isPow2(i) && t[i] == ~i) || t[i] == -1);
     }
