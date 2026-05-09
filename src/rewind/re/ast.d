@@ -197,7 +197,14 @@ class CharClass : Ast {
         return format("f%d [label=\"%s\"]", counter++, repr());
     }
 
+    static string toUni(dchar ch) {
+        if (ch <= 0xFFFF)
+            return format("\\u%04x", ch);
+        else
+            return format("\\U%08x", ch);
+    }
+
     override string repr() {
-        return chars.byInterval.map!(pair => pair.a.to!string ~ "-" ~ pair.b.to!string).join("");
+        return "["~chars.byInterval.map!(pair => toUni(pair.a) ~ "-" ~ toUni(pair.b-1)).join("")~"]";
     }
 }

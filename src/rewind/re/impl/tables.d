@@ -1,4 +1,4 @@
-module rewind.regex.impl.tables;
+module rewind.re.impl.tables;
 import std.uni;
 
 @safe pure nothrow @nogc:

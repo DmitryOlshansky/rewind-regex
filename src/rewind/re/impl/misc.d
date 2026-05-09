@@ -1,10 +1,10 @@
 // Lots of rudemntary things copied from std
 // All of that shouldn't exist once std has `stack`
 // and more extensive std.uni API.
-module rewind.regex.impl.misc;
+module rewind.re.impl.misc;
 
 import std.range.primitives, std.uni, std.exception;
-import rewind.regex.impl.tables;
+import rewind.re.impl.tables;
 
 /*
     Return a range of all $(CODEPOINTS) that casefold to
@@ -13,7 +13,6 @@ import rewind.regex.impl.tables;
 auto simpleCaseFoldings(dchar ch) @safe
 {
      // generated file
-    import rewind.regex.impl.tables : simpleCaseTable;
     alias sTable = simpleCaseTable;
     static struct Range
     {
@@ -219,3 +218,8 @@ auto caseEnclose(CodepointSet set)
     }
     return set;
 }
+
+alias AliasSeq(T...) = T;
+
+alias Escapables = AliasSeq!('[', ']', '\\', '^', '$', '.', '|', '?', ',', '-',
+    ';', ':', '#', '&', '%', '/', '<', '>', '`',  '*', '+', '(', ')', '{', '}',  '~');
