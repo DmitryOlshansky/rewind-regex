@@ -26,19 +26,26 @@
 #define DATA v5.16b
 #define DATA_Q q5
 #define BLOCKS v6.16b
-#define BMASKS v7.16b
-#define LOW v8.16b
-#define RES v9.16b
-#define RES_D v9.4s
-#define RES_LOW v9.8b
-#define RES2 v10.16b
-#define ONES v11.16b
-#define BITS_TABLE v12.16b
+#define BMASKS v16.16b
+#define LOW v17.16b
+#define RES v18.16b
+#define RES_D v18.4s
+#define RES_LOW v18.8b
+#define RES2 v19.16b
+#define ONES v20.16b
+#define BITS_TABLE v21.16b
 
+#ifdef __APPLE__
+.global _rewindRePrefilterTT
+_rewindRePrefilterTT:
+    adrp    SCRATCH, .bit_weights@GOTPAGE
+    ldr     SCRATCH, [SCRATCH, .bit_weights@GOTPAGEOFF]
+ #else
 .global rewindRePrefilterTT
 rewindRePrefilterTT:
     adrp    SCRATCH, .bit_weights
     add     SCRATCH, SCRATCH, :lo12:.bit_weights
+ #endif   
     ld1     {BITS_TABLE}, [SCRATCH]
     mov     PTR, INPUT
     ld1     {FIRST_TABLE, FIRST_TABLE_2}, [FIRST]

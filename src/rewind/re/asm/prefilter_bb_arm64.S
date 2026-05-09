@@ -23,10 +23,17 @@
 #define RES2_W v4.4s
 #define BITS_TABLE v5.16b
 
+#ifdef __APPLE__
+.global _rewindRePrefilterBB
+_rewindRePrefilterBB:
+    adrp    SCRATCH, .bit_weights@GOTPAGE
+    ldr     SCRATCH, [SCRATCH, .bit_weights@GOTPAGEOFF]
+ #else
 .global rewindRePrefilterBB
 rewindRePrefilterBB:
     adrp    SCRATCH, .bit_weights
     add     SCRATCH, SCRATCH, :lo12:.bit_weights
+ #endif 
     ld1     {BITS_TABLE}, [SCRATCH]
     mov     PTR, INPUT
     sub     V_INPUT_END, END_INPUT, LEN
