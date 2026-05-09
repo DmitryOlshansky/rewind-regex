@@ -251,14 +251,51 @@ unittest {
             fixup(alt, altTarget);
             fixup(toEnd, end);
         }
-    });/*
-    testCompileSym("(ab)*(ab)*", (fwd) { 
+    });
+    testCompile("(ab)*(ab)*", (fwd, bwd) { 
         with(fwd) with(Opcode) {
             code(MARK, 0);
+            size_t firstJump = code(JMP, 0);
+            size_t firstLoop = code(MARK, 2);
+            code(CHAR, 'a');
+            code(CHAR, 'b');
+            code(MARK, 3);
+            size_t firstFork = code(FORK, 0);
+            size_t secondJump = code(JMP, 0);
+            size_t secondLoop = code(MARK, 4);
+            code(CHAR, 'a');
+            code(CHAR, 'b');
+            code(MARK, 5);
+            size_t secondFork = code(FORK, 0);
             code(MARK, 1);
             code(END, 1);
+            fixup(firstJump, firstFork);
+            fixup(firstFork, firstLoop);
+            fixup(secondJump, secondFork);
+            fixup(secondFork, secondLoop);
         }
-    });*/
+        with(bwd) with(Opcode) {
+            code(MARK, 0);
+            size_t firstJump = code(JMP, 0);
+            size_t firstLoop = code(MARK, 2);
+            code(CHAR, 'b');
+            code(CHAR, 'a');
+            code(MARK, 3);
+            size_t firstFork = code(FORK, 0);
+            size_t secondJump = code(JMP, 0);
+            size_t secondLoop = code(MARK, 4);
+            code(CHAR, 'b');
+            code(CHAR, 'a');
+            code(MARK, 5);
+            size_t secondFork = code(FORK, 0);
+            code(MARK, 1);
+            code(END, 1);
+            fixup(firstJump, firstFork);
+            fixup(firstFork, firstLoop);
+            fixup(secondJump, secondFork);
+            fixup(secondFork, secondLoop);
+        }
+    });
     testCompileSym("a|b|c", (fwd) {
         with (fwd) with(Opcode) {
             code(MARK, 0);

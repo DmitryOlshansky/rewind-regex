@@ -103,14 +103,14 @@ size_t setMergePoints(uint[] code) {
     size_t mergePoints = 0;
 L_outer:
     while (pc < code.length) {
-        auto op = opcode(code[pc]);
-        auto val = argument(code[pc]);
         while (passes[pc] == true) { // execution passes more then once
             mergePoints++;
             code[pc] |= (1<<31);
             if (threads.empty) break L_outer;
             pc = threads.pop();
         }
+        auto op = opcode(code[pc]);
+        auto val = argument(code[pc]);
         passes[pc] = true;
         switch(op) with (Opcode) {
             case ANY:
