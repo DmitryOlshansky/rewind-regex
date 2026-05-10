@@ -17,13 +17,18 @@ struct ProgramPair {
     Program forward, backward;
 }
 
+struct ShortestPathMasks {
+    ubyte[256][]  masks;
+}
+
+
 auto compile(Ast pattern) {
     scope fwd = new Codegen(true);
     scope bwd = new Codegen(false);
     pattern.accept(fwd);
     pattern.accept(bwd);
     auto fwdProg = Program(fwd.code, fwd.chars, fwd.groupCounter, fwd.mergePoints);
-    auto bwdProg = Program(bwd.code, bwd.chars, fwd.groupCounter, fwd.mergePoints);
+    auto bwdProg = Program(bwd.code, bwd.chars, bwd.groupCounter, bwd.mergePoints);
     return ProgramPair(fwdProg, bwdProg);
 }
 

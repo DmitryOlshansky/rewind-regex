@@ -151,6 +151,118 @@ L_outer:
     return mergePoints;
 }
 
+int shortestPath(uint[] code) {
+    struct Thread {
+        int pc;
+        int path;
+    }
+    int pc = 0;
+    int path = 1;
+    int[] passes = new int[code.length];
+    Stack!Thread threads;
+L_outer:
+    while (pc < code.length) {
+        while (passes[pc] != 0 && passes[pc] < path ) {
+            if (threads.empty) break L_outer;
+            auto t = threads.pop();
+            pc = t.pc;
+            path = t.path;
+        }
+        auto op = opcode(code[pc]);
+        auto val = argument(code[pc]);
+        passes[pc] = path++;
+        switch (op) with (Opcode) {
+            case ANY:
+            case CHAR:
+            case NOTCHAR:
+            case TRIE:
+            case MARK:
+                pc++;
+                break;
+            case ONE_OF:
+            case NOT_ONE_OF:
+                pc += 1 + val;
+                break;
+            case INTERVALS:
+                pc += 1 + 2 * val;
+                break;
+            case BIT:
+                pc += 5;
+                break;
+            case JMP:
+                pc = (pc + val) & 0xFF_FFFF;
+                break;
+            case FORK:
+                threads.push(Thread((pc + val) & 0xFF_FFFF, path));
+                pc++;
+                break;
+            case END:
+                pc++;
+                break L_outer;
+            default:
+                assert(false);
+        }
+    }
+    if (!threads.empty) {
+        auto t = threads.pop();
+        pc = t.pc;
+        path = t.path;
+        goto L_outer;
+    }
+    int min = 0;
+    for (size_t i = 0; i<code.length; i++) {
+        if (opcode(code[i]) == Opcode.END) {
+            if (min == 0 || min < passes[i]) {
+                min = passes[i];
+            }
+        }
+    }
+    return min;
+}
+
+unittest {
+    void testPath(int path, void delegate(BytecodeBuilder) fn) {
+        import std.conv;
+        auto b = BytecodeBuilder(128);
+        fn(b);
+        auto code = b.build();
+        int p = shortestPath(code);
+        assert(p == path, text("path expected ", path, " vs ", p));
+    }
+    testPath(1, (b) {
+        with (b) with (Opcode) {
+            code(END, 1);
+        }
+    });
+    testPath(3, (b) {
+        with (b) with (Opcode) {
+            code(CHAR, 'x');
+            code(ONE_OF, 2);
+            raw('x');
+            raw('y');
+            code(END, 1);
+        }
+    });
+    testPath(2, (b) {
+        with (b) with (Opcode) {
+            size_t jmp = code(JMP, 0);
+            code(CHAR, 'x');
+            code(CHAR, 'y');
+            size_t ofs = code(END, 1);
+            fixup(jmp, ofs);
+        }
+    });
+    testPath(2, (b) {
+        with (b) with (Opcode) {
+            size_t fork = code(FORK, 0);
+            code(CHAR, 'x');
+            code(CHAR, 'y');
+            size_t ofs = code(END, 1);
+            fixup(fork, ofs);
+        }
+    });
+}
+
 string decode(uint[] code) pure {
     import std.format, std.algorithm, std.conv, std.range;
     auto app = appender!(char[])();
