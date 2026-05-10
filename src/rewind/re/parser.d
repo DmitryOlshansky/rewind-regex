@@ -1,8 +1,8 @@
 module rewind.re.parser;
 
-import std.uni, std.typecons, std.conv, std.exception;
+import std.uni, std.typecons, std.conv, std.exception, std.meta;
 import pry;
-import rewind.re.ast;
+import rewind.re.ast, rewind.re.impl.misc;
 
 private alias Stream = SimpleStream!(const(char)[]);
 private alias env = parsers!Stream;
@@ -502,28 +502,40 @@ static this() {
         }
         return set;
     }
-    auto allowedChars =	addChars(unicode.Cc, "{}()\\.?*+|").inverted;
+    auto allowedChars =	addChars(unicode.Cc, "[]{}()\\.?*+|").inverted;
     auto digits = CodepointSet('0', '9'+1);
     auto hex = CodepointSet('0', '9'+1, 'a', 'f'+1, 'A', 'F'+1);
+    auto cc = CodepointSet('a', 'z'+1, 'A', 'Z'+1);
     with(env) {
         auto num = set(digits).rep.map!(x => x.to!int);
         auto expr = dynamic!Ast();
-        auto escapes = seq(tk!'\\', any(
-            tk!'"',
-            tk!'\\',
-            tk!'/',
-            tk!'b'.map!(_ => cast(dchar)'\b'),
-            tk!'f'.map!(_ => cast(dchar)'\f'),
-            tk!'n'.map!(_ => cast(dchar)'\n'),
-            tk!'r'.map!(_ => cast(dchar)'\r'),
-            tk!'t'.map!(_ => cast(dchar)'\t'),
-            seq(tk!'x', set(hex).rep!(2,2)).map!(x => cast(dchar)to!int(x[1], 16)),
-            seq(tk!'u', set(hex).rep!(4,4)).map!(x => cast(dchar)to!int(x[1], 16)),
-            seq(tk!'U', set(hex).rep!(4,8)).map!(x => cast(dchar)to!int(x[1], 16))
-        )).map!(x => x[1]);
+        auto escapes = seq(tk!'\\',
+            any( 
+                any(
+                    staticMap!(tk, Escapables),
+                    tk!'b'.map!(_ => cast(dchar)'\b'),
+                    tk!'f'.map!(_ => cast(dchar)'\f'),
+                    tk!'n'.map!(_ => cast(dchar)'\n'),
+                    tk!'r'.map!(_ => cast(dchar)'\r'),
+                    tk!'t'.map!(_ => cast(dchar)'\t'),
+                    seq(tk!'c', set(cc).map!(x => x & 0x1f)).map!(x => cast(dchar)x[1]),
+                    seq(tk!'x', set(hex).rep!(2,2)).map!(x => cast(dchar)to!int(x[1], 16)),
+                    seq(tk!'u', set(hex).rep!(4,4)).map!(x => cast(dchar)to!int(x[1], 16)),
+                    seq(tk!'U', set(hex).rep!(8,8)).map!(x => cast(dchar)to!int(x[1], 16))
+                ).map!(x => cast(Ast) new Char(x)),
+                any(
+                    tk!'s'.map!(_ => cast(Ast)new CharClass(unicode.whitespace)),
+                    tk!'S'.map!(_ => cast(Ast)new CharClass(unicode.whitespace.inverted)),
+                    tk!'w'.map!(_ => cast(Ast)new CharClass(wordCharacter)),
+                    tk!'W'.map!(_ => cast(Ast)new CharClass(wordCharacter.inverted)),
+                    tk!'d'.map!(_ => cast(Ast)new CharClass(unicode.Nd)),
+                    tk!'D'.map!(_ => cast(Ast)new CharClass(unicode.Nd.inverted)),
+                )
+            )
+        ).map!(x => x[1]);
         auto atom = any(
             seq(tk!'(', expr, tk!')').map!(x => cast(Ast)new Group(x[1])),
-            escapes.map!(x => cast(Ast) new Char(x)),
+            escapes,
             tk!'.'.map!(x => cast(Ast) new Dot()),
             CharClassParser(false).map!(x => cast(Ast)new CharClass(x)),
             set(allowedChars).map!(x => cast(Ast) new Char(x))
@@ -565,4 +577,24 @@ unittest {
     assert(parse("a[a-z]c").repr == "a[\\u0061-\\u007a]c");
     assert(parse("a[a-z--z]c").repr == "a[\\u0061-\\u0079]c");
     assert(parse("[a]").repr == "[\\u0061-\\u0061]");
+    assertThrown!ParseException(parse("[a"));
+    assert(parse("\\cA").repr == "\x01");
+    assert(parse("\\cz").repr == "\x1a");
+    assert(parse("\\cA").repr == "\x01");
+    assertThrown(parse("\\c"));
+    assertThrown(parse("\\c1"));
+    void testCharSet(string pat, CodepointSet set) {
+        auto p = (cast(Pattern)parse(pat)).children[0];
+        auto alt = cast(Alt)p;
+        auto inner = alt.alts[0];
+        auto seq = cast(Seq)inner;
+        auto ch = cast(CharClass)seq.seq[0];
+        assert(ch.chars == set);
+    }
+    testCharSet("\\s", unicode.whitespace);
+    testCharSet("\\S", unicode.whitespace.inverted);
+    testCharSet("\\w", wordCharacter);
+    testCharSet("\\W", wordCharacter.inverted);
+    testCharSet("\\d", unicode.Nd);
+    testCharSet("\\D", unicode.Nd.inverted);
 }
